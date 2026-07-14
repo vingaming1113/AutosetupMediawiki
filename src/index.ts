@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import chalk from "chalk";
+import { generateProject } from "./generator";
 import { promptForConfig } from "./ui";
 
 const VERSION = "0.1.0";
@@ -28,9 +29,9 @@ if (args.has("--help") || args.has("-h")) {
 } else {
   try {
     const config = await promptForConfig();
-    console.log();
-    console.log(chalk.green("✓ Your choices are ready."));
-    console.log(chalk.dim(`  ${config.wikiName} · ${config.siteUrl} · ${config.extensions.length} extensions`));
+    const project = await generateProject(config);
+    console.log(chalk.green("\n✓ Setup files created."));
+    console.log(chalk.dim(`  ${project.directory}`));
   } catch (error) {
     console.error(chalk.red("\nSetup failed:"), error instanceof Error ? error.message : error);
     process.exitCode = 1;
