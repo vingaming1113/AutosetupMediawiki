@@ -35,18 +35,6 @@ export async function installProject(config: WikiConfig, directory: string): Pro
 
   await runDocker(directory, ["up", "-d", "database", "mediawiki"]);
   await waitForMediaWiki(directory);
-  const url = new URL(config.siteUrl);
-  const scriptPath = url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "");
-  await runDocker(directory, [
-    "exec", "-T", "mediawiki", "php", "maintenance/run.php", "install",
-    `--server=${url.origin}`, `--scriptpath=${scriptPath}`, "--dbtype=mysql", "--dbserver=database",
-    "--dbname=mediawiki", "--dbuser=mediawiki", `--dbpass=${config.databasePassword}`,
-    `--lang=${config.language}`, `--pass=${config.adminPassword}`, config.wikiName, config.adminUser,
-  ]);
-  await runDocker(directory, [
-    "exec", "-T", "mediawiki", "php", "-r",
-    "file_put_contents('/var/www/html/LocalSettings.php', \"\\nrequire_once '/var/www/html/LocalSettings.autosetup.php';\\n\", FILE_APPEND);",
-  ]);
   return { installed: true };
 }
 

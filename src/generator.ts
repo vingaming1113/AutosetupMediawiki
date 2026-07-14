@@ -42,6 +42,25 @@ function renderCompose(config: WikiConfig): string {
       timeout: 5s
       retries: 20
 
+  mediawiki-install:
+    image: mediawiki:1.46.0
+    restart: "no"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      WIKI_NAME: \${WIKI_NAME}
+      WIKI_LANGUAGE: \${WIKI_LANGUAGE}
+      WIKI_URL: \${WIKI_URL}
+      WIKI_ADMIN: \${WIKI_ADMIN}
+      WIKI_ADMIN_PASSWORD: \${WIKI_ADMIN_PASSWORD}
+      DATABASE_PASSWORD: \${DATABASE_PASSWORD}
+    command: ["php", "/autosetup/install.php"]
+    volumes:
+      - wiki-data:/var/www/html
+      - ./install.php:/autosetup/install.php:ro
+      - ./LocalSettings.autosetup.php:/var/www/html/LocalSettings.autosetup.php:ro
+
   mediawiki:
     image: mediawiki:1.46.0
     restart: unless-stopped
@@ -50,6 +69,8 @@ function renderCompose(config: WikiConfig): string {
     depends_on:
       database:
         condition: service_healthy
+      mediawiki-install:
+        condition: service_completed_successfully
 ${captchaEnvironment}
     volumes:
       - wiki-data:/var/www/html
@@ -60,6 +81,105 @@ ${captchaVolume}
 volumes:
   database-data:
   wiki-data:
+`;
+}
+
+function renderInstaller(): string {
+  return `<?php
+declare(strict_types=1);
+
+const LOCAL_SETTINGS = '/var/www/html/LocalSettings.php';
+const CUSTOM_SETTINGS = "require_once '/var/www/html/LocalSettings.autosetup.php';";
+
+if (is_file(LOCAL_SETTINGS)) {
+    $settings = file_get_contents(LOCAL_SETTINGS);
+    if (is_string($settings) && str_contains($settings, CUSTOM_SETTINGS)) {
+        fwrite(STDOUT, "MediaWiki is already installed.\n");
+        exit(0);
+    }
+
+    fwrite(STDERR, "LocalSettings.php exists, but automatic setup is incomplete.\n");
+    exit(1);
+}
+
+function requiredEnvironment(string $name): string
+{
+    $value = getenv($name);
+    if (!is_string($value) || $value === '') {
+        throw new RuntimeException("Missing required setup value: {$name}");
+    }
+    return $value;
+}
+
+function writeSecretFile(string $prefix, string $value): string
+{
+    $path = tempnam('/tmp', $prefix);
+    if ($path === false || file_put_contents($path, $value, LOCK_EX) === false) {
+        if (is_string($path)) {
+            @unlink($path);
+        }
+        throw new RuntimeException('Could not create a temporary credential file.');
+    }
+    chmod($path, 0600);
+    return $path;
+}
+
+$url = requiredEnvironment('WIKI_URL');
+$urlParts = parse_url($url);
+if (!is_array($urlParts) || !isset($urlParts['scheme'], $urlParts['host'])) {
+    throw new RuntimeException('WIKI_URL must be a full HTTP or HTTPS URL.');
+}
+$host = (string)$urlParts['host'];
+if (str_contains($host, ':') && !str_starts_with($host, '[')) {
+    $host = "[{$host}]";
+}
+$server = $urlParts['scheme'] . '://' . $host;
+if (isset($urlParts['port'])) {
+    $server .= ':' . $urlParts['port'];
+}
+$scriptPath = isset($urlParts['path']) ? rtrim((string)$urlParts['path'], '/') : '';
+
+$adminPasswordFile = writeSecretFile('wiki-admin-', requiredEnvironment('WIKI_ADMIN_PASSWORD'));
+$databasePasswordFile = writeSecretFile('wiki-db-', requiredEnvironment('DATABASE_PASSWORD'));
+$command = [
+    'php', '/var/www/html/maintenance/run.php', 'install',
+    '--server=' . $server,
+    '--scriptpath=' . $scriptPath,
+    '--dbtype=mysql',
+    '--dbserver=database',
+    '--dbname=mediawiki',
+    '--dbuser=mediawiki',
+    '--dbpassfile=' . $databasePasswordFile,
+    '--lang=' . requiredEnvironment('WIKI_LANGUAGE'),
+    '--passfile=' . $adminPasswordFile,
+    requiredEnvironment('WIKI_NAME'),
+    requiredEnvironment('WIKI_ADMIN'),
+];
+$descriptors = [
+    0 => ['file', '/dev/null', 'r'],
+    1 => ['file', '/dev/stdout', 'w'],
+    2 => ['file', '/dev/stderr', 'w'],
+];
+
+try {
+    $process = proc_open($command, $descriptors, $pipes, '/var/www/html');
+    if (!is_resource($process)) {
+        throw new RuntimeException('Could not start the MediaWiki installer.');
+    }
+    $exitCode = proc_close($process);
+} finally {
+    @unlink($adminPasswordFile);
+    @unlink($databasePasswordFile);
+}
+
+if ($exitCode !== 0) {
+    exit($exitCode);
+}
+if (file_put_contents(LOCAL_SETTINGS, "\n" . CUSTOM_SETTINGS . "\n", FILE_APPEND | LOCK_EX) === false) {
+    throw new RuntimeException('Could not finish LocalSettings.php.');
+}
+
+fwrite(STDOUT, "MediaWiki installation complete.\n");
 `;
 }
 
@@ -162,6 +282,8 @@ docker compose down
 
 Open ${config.siteUrl} after the installation completes.
 
+The first \`docker compose up -d\` automatically creates \`LocalSettings.php\` and installs MediaWiki. Follow progress with \`docker compose logs -f mediawiki-install mediawiki\`.
+
 Configuration secrets are stored in \`.env\`. Keep that file private and back up both Docker volumes regularly.
 ${renderCaptchaReadme(config)}
 `;
@@ -189,6 +311,7 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
   await Promise.all([
     writeFile(resolve(directory, "compose.yml"), renderCompose(config)),
     writeFile(resolve(directory, ".env"), renderEnvironment(config), { mode: 0o600 }),
+    writeFile(resolve(directory, "install.php"), renderInstaller()),
     writeFile(resolve(directory, "LocalSettings.autosetup.php"), renderSettings(config, logoFilename)),
     writeFile(resolve(directory, ".gitignore"), ".env\ndata/\n"),
     writeFile(resolve(directory, "README.md"), renderReadme(config)),
@@ -206,5 +329,5 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
   return { directory, logoFilename };
 }
 
-export const templates = { renderCompose, renderEnvironment, renderSettings };
+export const templates = { renderCompose, renderEnvironment, renderInstaller, renderSettings };
  

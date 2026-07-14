@@ -106,6 +106,7 @@ The default output directory is `./mediawiki-setup`. When automatic installation
 | --- | --- |
 | `compose.yml` | MediaWiki and MariaDB services |
 | `.env` | Port, setup values, database secrets, and optional CAPTCHA credentials |
+| `install.php` | One-time unattended installer run inside the MediaWiki container |
 | `LocalSettings.autosetup.php` | Wiki name, URL, logo, uploads, extensions, and CAPTCHA settings |
 | `extensions/CapCaptcha/` | Server-validated ConfirmEdit adapter, generated only when Cap is selected |
 | `data/images/` | Persistent uploads and the optional logo |
@@ -118,6 +119,8 @@ docker compose up -d
 docker compose logs -f
 docker compose down
 ```
+
+The first start waits for MariaDB, creates `LocalSettings.php`, installs MediaWiki, and then starts the web service. The installer is idempotent, so later starts keep the existing installation. To follow first-start progress, run `docker compose logs -f mediawiki-install mediawiki`.
 
 Do not run `docker compose down -v` unless you intentionally want to delete the wiki and database volumes.
 

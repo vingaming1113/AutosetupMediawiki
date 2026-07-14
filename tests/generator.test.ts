@@ -33,12 +33,18 @@ describe("project generator", () => {
     const project = await generateProject(input);
     const compose = await readFile(join(project.directory, "compose.yml"), "utf8");
     const settings = await readFile(join(project.directory, "LocalSettings.autosetup.php"), "utf8");
+    const installer = await readFile(join(project.directory, "install.php"), "utf8");
     const environment = await readFile(join(project.directory, ".env"), "utf8");
 
     expect(compose).toContain("mediawiki:1.46.0");
     expect(compose).toContain("mariadb:11.4");
     expect(settings).toContain("wfLoadExtension( 'VisualEditor' )");
     expect(settings).toContain("wiki-logo.svg");
+    expect(installer).toContain("maintenance/run.php', 'install'");
+    expect(installer).toContain("--passfile=");
+    expect(installer).toContain("--dbpassfile=");
+    expect(installer).not.toContain(input.adminPassword);
+    expect(installer).not.toContain(input.databasePassword);
     expect(environment).toContain("WIKI_NAME='Test $ Wiki'");
     expect(environment).toContain("DATABASE_PASSWORD='db$password'");
     expect((await stat(join(project.directory, ".env"))).mode & 0o777).toBe(0o600);
@@ -62,6 +68,28 @@ describe("project generator", () => {
     const compose = templates.renderCompose(config("unused"));
     expect(compose).toContain("${WIKI_PORT}:80");
     expect(compose).not.toContain("CapCaptcha");
+  });
+
+  test("installs MediaWiki before starting the web service", () => {
+    const compose = templates.renderCompose(config("unused"));
+    const parsed = Bun.YAML.parse(compose) as {
+      services: {
+        "mediawiki-install": {
+          command: string[];
+          environment: Record<string, string>;
+          volumes: string[];
+        };
+        mediawiki: { depends_on: Record<string, { condition: string }> };
+      };
+    };
+    const installService = parsed.services["mediawiki-install"];
+
+    expect(installService.command).toEqual(["php", "/autosetup/install.php"]);
+    expect(installService.environment.WIKI_ADMIN_PASSWORD).toBe("${WIKI_ADMIN_PASSWORD}");
+    expect(installService.environment.DATABASE_PASSWORD).toBe("${DATABASE_PASSWORD}");
+    expect(installService.volumes).toContain("./install.php:/autosetup/install.php:ro");
+    expect(parsed.services.mediawiki.depends_on["mediawiki-install"]?.condition)
+      .toBe("service_completed_successfully");
   });
 
   test("generates a server-validated Cap adapter without leaking its secret", async () => {
