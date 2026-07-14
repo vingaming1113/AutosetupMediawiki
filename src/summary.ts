@@ -9,6 +9,7 @@ function truncate(value: string, length: number): string {
 export function showSummary(config: WikiConfig, directory: string, result: InstallResult): void {
   const width = Math.max(64, Math.min(84, process.stdout.columns ?? 72));
   const inside = width - 4;
+  const title = result.installed ? "YOUR WIKI IS READY" : "SETUP FILES ARE READY";
   const line = (label: string, value: string): string => {
     const content = `${label.padEnd(13)} ${truncate(value, inside - 14)}`;
     return `│ ${content.padEnd(inside)} │`;
@@ -16,7 +17,7 @@ export function showSummary(config: WikiConfig, directory: string, result: Insta
   const border = chalk.hex("#a78bfa");
   console.log();
   console.log(border(`╭${"─".repeat(width - 2)}╮`));
-  console.log(border(`│ ${"YOUR WIKI IS READY".padEnd(inside)} │`));
+  console.log(border(`│ ${title.padEnd(inside)} │`));
   console.log(border(`├${"─".repeat(width - 2)}┤`));
   console.log(line("Status", result.installed ? "Running with Docker ✓" : result.reason ?? "Files generated"));
   console.log(line("Wiki", config.wikiName));
