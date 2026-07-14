@@ -3,7 +3,11 @@ import chalk from "chalk";
 import gradient from "gradient-string";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { EXTENSIONS, generatePassword, recommendedExtensions, type ExtensionName, type WikiConfig } from "./config";
+import {
+  CAPTCHA_PROVIDERS, EXTENSIONS, generatePassword, recommendedExtensions,
+  validateCapServerUrl, validateCapSiteKey,
+  type CaptchaConfig, type CaptchaProvider, type ExtensionName, type WikiConfig,
+} from "./config";
 
 const banner = [
   "███╗   ███╗███████╗██████╗ ██╗ █████╗ ██╗    ██╗██╗██╗  ██╗██╗",
@@ -82,6 +86,28 @@ export async function promptForConfig(): Promise<WikiConfig> {
     options: EXTENSIONS.map((item) => ({ value: item.value, label: item.label, hint: item.hint })),
   }));
 
+  const captchaProvider = quitIfCancelled(await p.select<CaptchaProvider>({
+    message: "Protect your wiki with a CAPTCHA?",
+    initialValue: "cap",
+    options: CAPTCHA_PROVIDERS.map(({ value, label, hint }) => ({ value, label, hint })),
+  }));
+
+  let captcha: CaptchaConfig = { provider: "none" };
+  if (captchaProvider === "cap") {
+    const serverUrl = quitIfCancelled(await p.text({
+      message: "Public URL of your Cap Standalone server",
+      placeholder: "https://cap.example.com",
+      validate: validateCapServerUrl,
+    })).trim().replace(/\/+$/, "");
+    const siteKey = quitIfCancelled(await p.text({
+      message: "Cap site key", validate: validateCapSiteKey,
+    })).trim();
+    const secretKey = quitIfCancelled(await p.password({
+      message: "Cap secret key", mask: "•", validate: required,
+    }));
+    captcha = { provider: "cap", serverUrl, siteKey, secretKey };
+  }
+
   const adminUser = quitIfCancelled(await p.text({
     message: "Administrator username", initialValue: "WikiAdmin", validate: required,
   })).trim();
@@ -102,7 +128,7 @@ export async function promptForConfig(): Promise<WikiConfig> {
   return {
     wikiName, language, port, siteUrl, adminUser, adminPassword,
     databasePassword: generatePassword(), logoPath: logoPathInput || undefined,
-    extensions, outputDirectory, installNow,
+    extensions, captcha, outputDirectory, installNow,
   };
 }
  

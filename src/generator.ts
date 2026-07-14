@@ -1,5 +1,12 @@
 import { chmod, copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import { extname, resolve } from "node:path";
+import {
+  CAP_CAPTCHA_AUTHENTICATION_REQUEST,
+  CAP_CAPTCHA_CLASS,
+  CAP_CAPTCHA_FIELD,
+  CAP_EXTENSION_MANIFEST,
+  renderCaptchaSettings,
+} from "./captcha";
 import type { WikiConfig } from "./config";
 
 export interface GeneratedProject {
@@ -10,6 +17,16 @@ export interface GeneratedProject {
 const phpQuote = (value: string): string => value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 
 function renderCompose(config: WikiConfig): string {
+  const captchaEnvironment = config.captcha.provider === "cap"
+    ? `    environment:
+      CAP_CAPTCHA_SERVER_URL: \${CAP_CAPTCHA_SERVER_URL}
+      CAP_CAPTCHA_SITE_KEY: \${CAP_CAPTCHA_SITE_KEY}
+      CAP_CAPTCHA_SECRET_KEY: \${CAP_CAPTCHA_SECRET_KEY}
+`
+    : "";
+  const captchaVolume = config.captcha.provider === "cap"
+    ? "      - ./extensions/CapCaptcha:/var/www/html/extensions/CapCaptcha:ro\n"
+    : "";
   return `services:
   database:
     image: mariadb:11.4
@@ -35,10 +52,12 @@ function renderCompose(config: WikiConfig): string {
     depends_on:
       database:
         condition: service_healthy
+${captchaEnvironment}
     volumes:
       - wiki-data:/var/www/html
       - ./data/images:/var/www/html/images
       - ./LocalSettings.autosetup.php:/var/www/html/LocalSettings.autosetup.php:ro
+${captchaVolume}
 
 volumes:
   database-data:
@@ -49,7 +68,7 @@ volumes:
 const dotenvQuote = (value: string | number): string => `'${String(value).replaceAll("'", "\\'")}'`;
 
 function renderEnvironment(config: WikiConfig): string {
-  return [
+  const values = [
     `WIKI_PORT=${dotenvQuote(config.port)}`,
     `WIKI_NAME=${dotenvQuote(config.wikiName)}`,
     `WIKI_LANGUAGE=${dotenvQuote(config.language)}`,
@@ -58,8 +77,15 @@ function renderEnvironment(config: WikiConfig): string {
     `WIKI_ADMIN_PASSWORD=${dotenvQuote(config.adminPassword)}`,
     `DATABASE_PASSWORD=${dotenvQuote(config.databasePassword)}`,
     `DATABASE_ROOT_PASSWORD=${dotenvQuote(crypto.randomUUID().replaceAll("-", ""))}`,
-    "",
-  ].join("\n");
+  ];
+  if (config.captcha.provider === "cap") {
+    values.push(
+      `CAP_CAPTCHA_SERVER_URL=${dotenvQuote(config.captcha.serverUrl)}`,
+      `CAP_CAPTCHA_SITE_KEY=${dotenvQuote(config.captcha.siteKey)}`,
+      `CAP_CAPTCHA_SECRET_KEY=${dotenvQuote(config.captcha.secretKey)}`,
+    );
+  }
+  return [...values, ""].join("\n");
 }
 
 function renderSettings(config: WikiConfig, logoFilename?: string): string {
@@ -83,6 +109,7 @@ ${logo}
 
 // Selected bundled extensions
 ${extensions}
+${renderCaptchaSettings(config.captcha)}
 `;
 }
 
@@ -101,6 +128,15 @@ docker compose down
 Open ${config.siteUrl} after the installation completes.
 
 Configuration secrets are stored in \`.env\`. Keep that file private and back up both Docker volumes regularly.
+${config.captcha.provider === "cap" ? `
+## Cap CAPTCHA
+
+This wiki uses the self-hosted [Cap CAPTCHA](https://github.com/tiagozip/cap). Keep the Cap asset server enabled and publicly reachable at ${config.captcha.serverUrl}. In the Cap dashboard, allow ${config.siteUrl} as a CORS origin.
+
+Pin the Cap asset server to \`WIDGET_VERSION=0.1.56\` and \`WASM_VERSION=0.0.7\`.
+
+The site secret is stored only in \`.env\`; never paste it into logs or issue reports.
+` : ""}
 `;
 }
 
@@ -119,12 +155,25 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
     await copyFile(resolve(config.logoPath), resolve(directory, "data/images", logoFilename));
   }
 
+  if (config.captcha.provider === "cap") {
+    await mkdir(resolve(directory, "extensions/CapCaptcha/includes"), { recursive: true });
+  }
+
   await Promise.all([
     writeFile(resolve(directory, "compose.yml"), renderCompose(config)),
     writeFile(resolve(directory, ".env"), renderEnvironment(config), { mode: 0o600 }),
     writeFile(resolve(directory, "LocalSettings.autosetup.php"), renderSettings(config, logoFilename)),
     writeFile(resolve(directory, ".gitignore"), ".env\ndata/\n"),
     writeFile(resolve(directory, "README.md"), renderReadme(config)),
+    ...(config.captcha.provider === "cap" ? [
+      writeFile(resolve(directory, "extensions/CapCaptcha/extension.json"), CAP_EXTENSION_MANIFEST),
+      writeFile(resolve(directory, "extensions/CapCaptcha/includes/CapCaptcha.php"), CAP_CAPTCHA_CLASS),
+      writeFile(
+        resolve(directory, "extensions/CapCaptcha/includes/CapCaptchaAuthenticationRequest.php"),
+        CAP_CAPTCHA_AUTHENTICATION_REQUEST,
+      ),
+      writeFile(resolve(directory, "extensions/CapCaptcha/includes/HTMLCapCaptchaField.php"), CAP_CAPTCHA_FIELD),
+    ] : []),
   ]);
 
   return { directory, logoFilename };
