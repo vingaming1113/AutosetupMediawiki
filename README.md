@@ -1,5 +1,9 @@
 # MediaWiki Autosetup
 
+<p align="center">
+  <img src="docs/assets/mediawiki-autosetup-banner.png" alt="MediaWiki Autosetup — original terminal, gear, and linked wiki documents logo" width="100%">
+</p>
+
 <div align="center">
 
 [![CI](https://img.shields.io/github/actions/workflow/status/vingaming1113/AutosetupMediawiki/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/vingaming1113/AutosetupMediawiki/actions/workflows/ci.yml)
