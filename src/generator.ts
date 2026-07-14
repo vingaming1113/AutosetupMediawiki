@@ -1,5 +1,5 @@
 import { chmod, copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { extname, resolve } from "node:path";
 import type { WikiConfig } from "./config";
 
 export interface GeneratedProject {
@@ -46,16 +46,18 @@ volumes:
 `;
 }
 
+const dotenvQuote = (value: string | number): string => `'${String(value).replaceAll("'", "\\'")}'`;
+
 function renderEnvironment(config: WikiConfig): string {
   return [
-    `WIKI_PORT=${config.port}`,
-    `WIKI_NAME=${config.wikiName}`,
-    `WIKI_LANGUAGE=${config.language}`,
-    `WIKI_URL=${config.siteUrl}`,
-    `WIKI_ADMIN=${config.adminUser}`,
-    `WIKI_ADMIN_PASSWORD=${config.adminPassword}`,
-    `DATABASE_PASSWORD=${config.databasePassword}`,
-    `DATABASE_ROOT_PASSWORD=${crypto.randomUUID().replaceAll("-", "")}`,
+    `WIKI_PORT=${dotenvQuote(config.port)}`,
+    `WIKI_NAME=${dotenvQuote(config.wikiName)}`,
+    `WIKI_LANGUAGE=${dotenvQuote(config.language)}`,
+    `WIKI_URL=${dotenvQuote(config.siteUrl)}`,
+    `WIKI_ADMIN=${dotenvQuote(config.adminUser)}`,
+    `WIKI_ADMIN_PASSWORD=${dotenvQuote(config.adminPassword)}`,
+    `DATABASE_PASSWORD=${dotenvQuote(config.databasePassword)}`,
+    `DATABASE_ROOT_PASSWORD=${dotenvQuote(crypto.randomUUID().replaceAll("-", ""))}`,
     "",
   ].join("\n");
 }
