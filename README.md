@@ -28,13 +28,14 @@ The cards above are live project statistics from GitHub and Shields.io, so build
 
 - Guided terminal interface with a cyan, violet, and rose gradient banner
 - Arrow-key menus and a Space-driven extension picker
+- Optional [Cap.js](https://github.com/tiagozip/cap) CAPTCHA, listed first and recommended
 - MediaWiki 1.46 and MariaDB 11.4 on official container images
 - Persistent wiki, database, and upload storage
 - Generated database secrets and private `.env` handling
 - Optional logo configuration
 - Automatic installation when Docker Compose is available
 - Safe generated-files fallback when Docker is unavailable
-- Final card showing the URL, administrator, extensions, files, and commands
+- Final card showing the URL, administrator, CAPTCHA, extensions, files, and commands
 
 ## Extensions
 
@@ -48,6 +49,24 @@ Choose any combination of these bundled MediaWiki extensions:
 - Scribunto
 - SyntaxHighlight
 - Nuke
+
+## CAPTCHA protection
+
+The wizard lists **Cap.js** first and recommends it as the privacy-friendly, self-hosted CAPTCHA option. You can also choose **No CAPTCHA** and configure protection later.
+
+To select Cap, first create a site key in a publicly reachable [Cap Standalone](https://trycap.dev/guide/standalone/) deployment. The wizard asks for:
+
+- the public Cap server URL;
+- the site key;
+- the matching secret key.
+
+Enable Cap Standalone's asset server and pin its widget and WASM versions. This project is tested against Cap Standalone `3.1.5`, widget `0.1.56`, and WASM `0.0.7`. The generated wiki loads the widget from your Cap server—not a third-party CDN—and verifies every submitted token server-side through `/siteverify`.
+
+The secret key is written only to the private generated `.env` file. The generated MediaWiki adapter contains no credentials. In the Cap dashboard, configure the wiki's visitor-facing URL as an allowed CORS origin.
+
+Cap protects account creation, repeated failed logins, and edits that add external links. Administrators and other users with ConfirmEdit's `skipcaptcha` permission keep the standard bypass behavior.
+
+See [tiagozip/cap](https://github.com/tiagozip/cap) for Cap's source and documentation.
 
 ## Requirements
 
@@ -74,8 +93,9 @@ The default output directory is `./mediawiki-setup`. When automatic installation
 | File | Purpose |
 | --- | --- |
 | `compose.yml` | MediaWiki and MariaDB services |
-| `.env` | Port, setup values, and generated database secrets |
-| `LocalSettings.autosetup.php` | Wiki name, URL, logo, uploads, and extensions |
+| `.env` | Port, setup values, database secrets, and an optional Cap secret |
+| `LocalSettings.autosetup.php` | Wiki name, URL, logo, uploads, extensions, and CAPTCHA settings |
+| `extensions/CapCaptcha/` | Server-validated ConfirmEdit adapter, generated only when Cap is selected |
 | `data/images/` | Persistent uploads and the optional logo |
 | `README.md` | Commands for operating the generated wiki |
 
