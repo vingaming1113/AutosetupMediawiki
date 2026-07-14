@@ -1,6 +1,11 @@
 #!/usr/bin/env bun
 
+import * as p from "@clack/prompts";
 import chalk from "chalk";
+import { generateProject } from "./generator";
+import { installProject } from "./installer";
+import { showSummary } from "./summary";
+import { promptForConfig } from "./ui";
 
 const VERSION = "0.1.0";
 
@@ -25,7 +30,23 @@ if (args.has("--help") || args.has("-h")) {
 } else if (args.has("--version") || args.has("-v")) {
   console.log(VERSION);
 } else {
-  console.log(chalk.cyan("MediaWiki Autosetup is ready."));
-  console.log(chalk.dim("Run with --help to see the available options."));
+  try {
+    const config = await promptForConfig();
+    const progress = p.spinner();
+    progress.start("Creating your MediaWiki project");
+    try {
+      const project = await generateProject(config);
+      progress.message(config.installNow ? "Starting MediaWiki with Docker" : "Finishing setup files");
+      const result = await installProject(config, project.directory);
+      progress.stop(result.installed ? "MediaWiki is running" : "Setup files are ready");
+      showSummary(config, project.directory, result);
+    } catch (error) {
+      progress.stop("Setup stopped");
+      throw error;
+    }
+  } catch (error) {
+    console.error(chalk.red("\nSetup failed:"), error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }
 
