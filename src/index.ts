@@ -2,6 +2,8 @@
 
 import chalk from "chalk";
 import { generateProject } from "./generator";
+import { installProject } from "./installer";
+import { showSummary } from "./summary";
 import { promptForConfig } from "./ui";
 
 const VERSION = "0.1.0";
@@ -30,8 +32,8 @@ if (args.has("--help") || args.has("-h")) {
   try {
     const config = await promptForConfig();
     const project = await generateProject(config);
-    console.log(chalk.green("\n✓ Setup files created."));
-    console.log(chalk.dim(`  ${project.directory}`));
+    const result = await installProject(config, project.directory);
+    showSummary(config, project.directory, result);
   } catch (error) {
     console.error(chalk.red("\nSetup failed:"), error instanceof Error ? error.message : error);
     process.exitCode = 1;
