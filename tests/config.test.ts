@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { generatePassword, recommendedExtensions } from "../src/config";
+import {
+  CAPTCHA_PROVIDERS,
+  generatePassword,
+  recommendedExtensions,
+  validateCapServerUrl,
+  validateCapSiteKey,
+} from "../src/config";
 
 describe("configuration helpers", () => {
   test("generates passwords at the requested length", () => {
@@ -14,6 +20,22 @@ describe("configuration helpers", () => {
     expect(recommendedExtensions()).toEqual([
       "VisualEditor", "WikiEditor", "Cite", "ParserFunctions", "TemplateData",
     ]);
+  });
+
+  test("puts the recommended Cap provider first", () => {
+    expect(CAPTCHA_PROVIDERS.map(({ value }) => value)).toEqual([
+      "cap", "turnstile", "hcaptcha", "recaptcha", "none",
+    ]);
+    expect(CAPTCHA_PROVIDERS.filter(({ recommended }) => recommended)).toEqual([CAPTCHA_PROVIDERS[0]]);
+  });
+
+  test("validates Cap server URLs and site keys", () => {
+    expect(validateCapServerUrl("https://cap.example.com/base/")).toBeUndefined();
+    expect(validateCapServerUrl("javascript:alert(1)")).toContain("http");
+    expect(validateCapServerUrl("https://user:secret@cap.example.com")).toContain("without credentials");
+    expect(validateCapServerUrl("https://cap.example.com?secret=value")).toContain("without credentials");
+    expect(validateCapSiteKey("d9256640cb53")).toBeUndefined();
+    expect(validateCapSiteKey("../../wrong")).toContain("letters");
   });
 });
  

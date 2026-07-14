@@ -1,4 +1,5 @@
 import chalk from "chalk";
+import { captchaLabel } from "./captcha";
 import type { WikiConfig } from "./config";
 import type { InstallResult } from "./installer";
 
@@ -23,6 +24,7 @@ export function showSummary(config: WikiConfig, directory: string, result: Insta
   console.log(line("Wiki", config.wikiName));
   console.log(line("URL", config.siteUrl));
   console.log(line("Admin", config.adminUser));
+  console.log(line("CAPTCHA", captchaLabel(config.captcha)));
   console.log(line("Extensions", config.extensions.length ? config.extensions.join(", ") : "None"));
   console.log(line("Files", directory));
   console.log(border(`├${"─".repeat(width - 2)}┤`));

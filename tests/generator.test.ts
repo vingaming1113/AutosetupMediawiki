@@ -16,7 +16,8 @@ function config(outputDirectory: string): WikiConfig {
     wikiName: "Test $ Wiki", language: "en", port: 8080,
     siteUrl: "http://localhost:8080", adminUser: "WikiAdmin",
     adminPassword: "safe$password", databasePassword: "db$password",
-    extensions: ["VisualEditor", "Cite"], outputDirectory, installNow: false,
+    extensions: ["VisualEditor", "Cite"], captcha: { provider: "none" },
+    outputDirectory, installNow: false,
   };
 }
 
@@ -58,6 +59,125 @@ describe("project generator", () => {
   });
 
   test("renders the selected port", () => {
-    expect(templates.renderCompose(config("unused"))).toContain("${WIKI_PORT}:80");
+    const compose = templates.renderCompose(config("unused"));
+    expect(compose).toContain("${WIKI_PORT}:80");
+    expect(compose).not.toContain("CapCaptcha");
+  });
+
+  test("generates a server-validated Cap adapter without leaking its secret", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mediawiki-autosetup-cap-"));
+    temporaryDirectories.push(root);
+    const secretKey = "cap-secret-never-publish";
+    const input: WikiConfig = {
+      ...config(join(root, "wiki")),
+      captcha: {
+        provider: "cap",
+        serverUrl: "https://cap.example.com",
+        siteKey: "d9256640cb53",
+        secretKey,
+      },
+    };
+
+    const project = await generateProject(input);
+    const compose = await readFile(join(project.directory, "compose.yml"), "utf8");
+    const environment = await readFile(join(project.directory, ".env"), "utf8");
+    const settings = await readFile(join(project.directory, "LocalSettings.autosetup.php"), "utf8");
+    const generatedReadme = await readFile(join(project.directory, "README.md"), "utf8");
+    const manifestText = await readFile(
+      join(project.directory, "extensions/CapCaptcha/extension.json"), "utf8",
+    );
+    const adapter = await readFile(
+      join(project.directory, "extensions/CapCaptcha/includes/CapCaptcha.php"), "utf8",
+    );
+    const authentication = await readFile(
+      join(project.directory, "extensions/CapCaptcha/includes/CapCaptchaAuthenticationRequest.php"), "utf8",
+    );
+    const field = await readFile(
+      join(project.directory, "extensions/CapCaptcha/includes/HTMLCapCaptchaField.php"), "utf8",
+    );
+    const parsedCompose = Bun.YAML.parse(compose) as {
+      services: { mediawiki: { environment: Record<string, string>; volumes: string[] } };
+    };
+    const manifest = JSON.parse(manifestText) as Record<string, unknown>;
+
+    expect(compose).toContain("./extensions/CapCaptcha:/var/www/html/extensions/CapCaptcha:ro");
+    expect(compose).toContain("CAP_CAPTCHA_SECRET_KEY: ${CAP_CAPTCHA_SECRET_KEY}");
+    expect(parsedCompose.services.mediawiki.environment.CAP_CAPTCHA_SITE_KEY).toBe("${CAP_CAPTCHA_SITE_KEY}");
+    expect(parsedCompose.services.mediawiki.volumes).toContain(
+      "./extensions/CapCaptcha:/var/www/html/extensions/CapCaptcha:ro",
+    );
+    expect(environment).toContain(`CAP_CAPTCHA_SECRET_KEY='${secretKey}'`);
+    expect(settings).toContain("MediaWiki\\Extension\\CapCaptcha\\CapCaptcha::class");
+    expect(settings).not.toContain("ReCaptchaNoCaptcha");
+    expect(adapter).toContain("siteverify");
+    expect(authentication).toContain("class CapCaptchaAuthenticationRequest");
+    expect(field).toContain("data-cap-hidden-field-name");
+    expect(manifest["license-name"]).toBe("MIT");
+    expect(generatedReadme).toContain("WIDGET_VERSION=0.1.56");
+    for (const publicFile of [compose, settings, generatedReadme, manifestText, adapter, authentication, field]) {
+      expect(publicFile).not.toContain(secretKey);
+    }
+  });
+
+  test("configures bundled managed CAPTCHA providers without leaking their secrets", async () => {
+    const providers = [
+      {
+        provider: "turnstile" as const,
+        label: "Cloudflare Turnstile",
+        extension: "ConfirmEdit/Turnstile",
+        className: "MediaWiki\\Extension\\ConfirmEdit\\Turnstile\\Turnstile::class",
+        siteVariable: "TURNSTILE_SITE_KEY",
+        secretVariable: "TURNSTILE_SECRET_KEY",
+        remoteIpSetting: "$wgTurnstileSendRemoteIP = false;",
+      },
+      {
+        provider: "hcaptcha" as const,
+        label: "hCaptcha",
+        extension: "ConfirmEdit/hCaptcha",
+        className: "MediaWiki\\Extension\\ConfirmEdit\\hCaptcha\\HCaptcha::class",
+        siteVariable: "HCAPTCHA_SITE_KEY",
+        secretVariable: "HCAPTCHA_SECRET_KEY",
+        remoteIpSetting: "$wgHCaptchaSendRemoteIP = false;",
+      },
+      {
+        provider: "recaptcha" as const,
+        label: "Google reCAPTCHA v2",
+        extension: "ConfirmEdit/ReCaptchaNoCaptcha",
+        className: "MediaWiki\\Extension\\ConfirmEdit\\ReCaptchaNoCaptcha\\ReCaptchaNoCaptcha::class",
+        siteVariable: "RECAPTCHA_SITE_KEY",
+        secretVariable: "RECAPTCHA_SECRET_KEY",
+        remoteIpSetting: "$wgReCaptchaSendRemoteIP = false;",
+      },
+    ];
+
+    for (const provider of providers) {
+      const root = await mkdtemp(join(tmpdir(), `mediawiki-autosetup-${provider.provider}-`));
+      temporaryDirectories.push(root);
+      const secretKey = `${provider.provider}-secret-never-publish`;
+      const project = await generateProject({
+        ...config(join(root, "wiki")),
+        captcha: { provider: provider.provider, siteKey: "public-site-key", secretKey },
+      });
+      const compose = await readFile(join(project.directory, "compose.yml"), "utf8");
+      const environment = await readFile(join(project.directory, ".env"), "utf8");
+      const settings = await readFile(join(project.directory, "LocalSettings.autosetup.php"), "utf8");
+      const generatedReadme = await readFile(join(project.directory, "README.md"), "utf8");
+      const parsedCompose = Bun.YAML.parse(compose) as {
+        services: { mediawiki: { environment: Record<string, string> } };
+      };
+
+      expect(parsedCompose.services.mediawiki.environment[provider.siteVariable])
+        .toBe(`\${${provider.siteVariable}}`);
+      expect(environment).toContain(`${provider.secretVariable}='${secretKey}'`);
+      expect(settings).toContain(`'${provider.extension}'`);
+      expect(settings).toContain(provider.className);
+      expect(settings).toContain(provider.remoteIpSetting);
+      expect(settings).toContain("$wgCaptchaTriggers['createaccount'] = true;");
+      expect(generatedReadme).toContain(provider.label);
+      await expect(stat(join(project.directory, "extensions/CapCaptcha"))).rejects.toThrow();
+      for (const publicFile of [compose, settings, generatedReadme]) {
+        expect(publicFile).not.toContain(secretKey);
+      }
+    }
   });
 });

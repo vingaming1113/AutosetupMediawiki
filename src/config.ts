@@ -11,6 +11,43 @@ export const EXTENSIONS = [
 
 export type ExtensionName = (typeof EXTENSIONS)[number]["value"];
 
+export const CAPTCHA_PROVIDERS = [
+  {
+    value: "cap",
+    label: "Cap.js (recommended)",
+    hint: "Private, self-hosted proof-of-work · github.com/tiagozip/cap",
+    recommended: true,
+  },
+  {
+    value: "turnstile",
+    label: "Cloudflare Turnstile",
+    hint: "Managed, usually invisible challenge",
+    recommended: false,
+  },
+  {
+    value: "hcaptcha",
+    label: "hCaptcha",
+    hint: "Managed CAPTCHA challenge service",
+    recommended: false,
+  },
+  {
+    value: "recaptcha",
+    label: "Google reCAPTCHA v2",
+    hint: "Managed by Google; shares visitor data",
+    recommended: false,
+  },
+  { value: "none", label: "No CAPTCHA", hint: "You can add one later", recommended: false },
+] as const;
+
+export type CaptchaProvider = (typeof CAPTCHA_PROVIDERS)[number]["value"];
+
+export type CaptchaConfig =
+  | { provider: "cap"; serverUrl: string; siteKey: string; secretKey: string }
+  | { provider: "turnstile"; siteKey: string; secretKey: string }
+  | { provider: "hcaptcha"; siteKey: string; secretKey: string }
+  | { provider: "recaptcha"; siteKey: string; secretKey: string }
+  | { provider: "none" };
+
 export interface WikiConfig {
   wikiName: string;
   language: string;
@@ -21,12 +58,30 @@ export interface WikiConfig {
   databasePassword: string;
   logoPath?: string;
   extensions: ExtensionName[];
+  captcha: CaptchaConfig;
   outputDirectory: string;
   installNow: boolean;
 }
 
 export function recommendedExtensions(): ExtensionName[] {
   return EXTENSIONS.filter((extension) => extension.recommended).map((extension) => extension.value);
+}
+
+export function validateCapServerUrl(value: string | undefined): string | undefined {
+  try {
+    const url = new URL(value?.trim() ?? "");
+    if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+    if (url.username || url.password || url.search || url.hash) {
+      return "Use a server URL without credentials, a query, or a fragment.";
+    }
+  } catch {
+    return "Enter a full URL beginning with http:// or https://.";
+  }
+}
+
+export function validateCapSiteKey(value: string | undefined): string | undefined {
+  if (!value?.trim()) return "Please enter a value.";
+  if (!/^[A-Za-z0-9_-]+$/.test(value.trim())) return "Use only letters, numbers, underscores, or hyphens.";
 }
 
 export function generatePassword(length = 24): string {
