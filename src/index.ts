@@ -44,8 +44,11 @@ if (args.has("--help") || args.has("-h")) {
       progress.stop("Setup stopped");
       throw error;
     }
-  } catch (error) {
-    console.error(chalk.red("\nSetup failed:"), error instanceof Error ? error.message : error);
+  } catch {
+    console.error(chalk.red(
+      "\nSetup failed. Error details were hidden to protect passwords. "
+      + "Check Docker's status and retry.",
+    ));
     process.exitCode = 1;
   }
 }

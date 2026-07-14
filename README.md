@@ -133,6 +133,7 @@ The generated stack serves HTTP on the selected port. For a public address such 
 - Run `bun audit` whenever JavaScript dependencies change.
 - Never paste credentials or private URLs into public issue reports.
 - The generator refuses to overwrite a non-empty output directory.
+- Setup failures hide raw exception details because Docker errors may contain credentials.
 
 ## Development
 
