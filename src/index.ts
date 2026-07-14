@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { generateProject } from "./generator";
 import { installProject } from "./installer";
@@ -31,9 +32,18 @@ if (args.has("--help") || args.has("-h")) {
 } else {
   try {
     const config = await promptForConfig();
-    const project = await generateProject(config);
-    const result = await installProject(config, project.directory);
-    showSummary(config, project.directory, result);
+    const progress = p.spinner();
+    progress.start("Creating your MediaWiki project");
+    try {
+      const project = await generateProject(config);
+      progress.message(config.installNow ? "Starting MediaWiki with Docker" : "Finishing setup files");
+      const result = await installProject(config, project.directory);
+      progress.stop(result.installed ? "MediaWiki is running" : "Setup files are ready");
+      showSummary(config, project.directory, result);
+    } catch (error) {
+      progress.stop("Setup stopped");
+      throw error;
+    }
   } catch (error) {
     console.error(chalk.red("\nSetup failed:"), error instanceof Error ? error.message : error);
     process.exitCode = 1;
