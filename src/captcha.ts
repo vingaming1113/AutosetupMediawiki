@@ -279,19 +279,79 @@ class HTMLCapCaptchaField extends HTMLFormField {
 
 export function renderCaptchaSettings(captcha: CaptchaConfig): string {
   if (captcha.provider === "none") return "";
-  return `
+  const triggers = `
+$wgCaptchaTriggers['createaccount'] = true;
+$wgCaptchaTriggers['badlogin'] = true;
+$wgCaptchaTriggers['addurl'] = true;
+`;
+  if (captcha.provider === "cap") return `
 // Self-hosted Cap CAPTCHA through ConfirmEdit
 $wgCapCaptchaServerUrl = getenv( 'CAP_CAPTCHA_SERVER_URL' );
 $wgCapCaptchaSiteKey = getenv( 'CAP_CAPTCHA_SITE_KEY' );
 $wgCapCaptchaSecretKey = getenv( 'CAP_CAPTCHA_SECRET_KEY' );
 wfLoadExtensions( [ 'ConfirmEdit', 'CapCaptcha' ] );
 $wgCaptchaClass = MediaWiki\\Extension\\CapCaptcha\\CapCaptcha::class;
-$wgCaptchaTriggers['createaccount'] = true;
-$wgCaptchaTriggers['badlogin'] = true;
-$wgCaptchaTriggers['addurl'] = true;
-`;
+${triggers}`;
+  if (captcha.provider === "turnstile") return `
+// Cloudflare Turnstile through ConfirmEdit
+$wgTurnstileSiteKey = getenv( 'TURNSTILE_SITE_KEY' );
+$wgTurnstileSecretKey = getenv( 'TURNSTILE_SECRET_KEY' );
+$wgTurnstileSendRemoteIP = false;
+wfLoadExtensions( [ 'ConfirmEdit', 'ConfirmEdit/Turnstile' ] );
+$wgCaptchaClass = MediaWiki\\Extension\\ConfirmEdit\\Turnstile\\Turnstile::class;
+${triggers}`;
+  if (captcha.provider === "hcaptcha") return `
+// hCaptcha through ConfirmEdit
+$wgHCaptchaSiteKey = getenv( 'HCAPTCHA_SITE_KEY' );
+$wgHCaptchaSecretKey = getenv( 'HCAPTCHA_SECRET_KEY' );
+$wgHCaptchaSendRemoteIP = false;
+wfLoadExtensions( [ 'ConfirmEdit', 'ConfirmEdit/hCaptcha' ] );
+$wgCaptchaClass = MediaWiki\\Extension\\ConfirmEdit\\hCaptcha\\HCaptcha::class;
+${triggers}`;
+  return `
+// Google reCAPTCHA v2 through ConfirmEdit
+$wgReCaptchaSiteKey = getenv( 'RECAPTCHA_SITE_KEY' );
+$wgReCaptchaSecretKey = getenv( 'RECAPTCHA_SECRET_KEY' );
+$wgReCaptchaSendRemoteIP = false;
+wfLoadExtensions( [ 'ConfirmEdit', 'ConfirmEdit/ReCaptchaNoCaptcha' ] );
+$wgCaptchaClass = MediaWiki\\Extension\\ConfirmEdit\\ReCaptchaNoCaptcha\\ReCaptchaNoCaptcha::class;
+${triggers}`;
+}
+
+export function captchaEnvironmentVariables(captcha: CaptchaConfig): Array<[string, string]> {
+  switch (captcha.provider) {
+    case "cap":
+      return [
+        ["CAP_CAPTCHA_SERVER_URL", captcha.serverUrl],
+        ["CAP_CAPTCHA_SITE_KEY", captcha.siteKey],
+        ["CAP_CAPTCHA_SECRET_KEY", captcha.secretKey],
+      ];
+    case "turnstile":
+      return [
+        ["TURNSTILE_SITE_KEY", captcha.siteKey],
+        ["TURNSTILE_SECRET_KEY", captcha.secretKey],
+      ];
+    case "hcaptcha":
+      return [
+        ["HCAPTCHA_SITE_KEY", captcha.siteKey],
+        ["HCAPTCHA_SECRET_KEY", captcha.secretKey],
+      ];
+    case "recaptcha":
+      return [
+        ["RECAPTCHA_SITE_KEY", captcha.siteKey],
+        ["RECAPTCHA_SECRET_KEY", captcha.secretKey],
+      ];
+    case "none":
+      return [];
+  }
 }
 
 export function captchaLabel(captcha: CaptchaConfig): string {
-  return captcha.provider === "cap" ? "Cap.js (self-hosted)" : "None";
+  switch (captcha.provider) {
+    case "cap": return "Cap.js (self-hosted)";
+    case "turnstile": return "Cloudflare Turnstile";
+    case "hcaptcha": return "hCaptcha";
+    case "recaptcha": return "Google reCAPTCHA v2";
+    case "none": return "None";
+  }
 }

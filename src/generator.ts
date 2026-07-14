@@ -5,6 +5,7 @@ import {
   CAP_CAPTCHA_CLASS,
   CAP_CAPTCHA_FIELD,
   CAP_EXTENSION_MANIFEST,
+  captchaEnvironmentVariables,
   renderCaptchaSettings,
 } from "./captcha";
 import type { WikiConfig } from "./config";
@@ -17,12 +18,9 @@ export interface GeneratedProject {
 const phpQuote = (value: string): string => value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 
 function renderCompose(config: WikiConfig): string {
-  const captchaEnvironment = config.captcha.provider === "cap"
-    ? `    environment:
-      CAP_CAPTCHA_SERVER_URL: \${CAP_CAPTCHA_SERVER_URL}
-      CAP_CAPTCHA_SITE_KEY: \${CAP_CAPTCHA_SITE_KEY}
-      CAP_CAPTCHA_SECRET_KEY: \${CAP_CAPTCHA_SECRET_KEY}
-`
+  const captchaVariables = captchaEnvironmentVariables(config.captcha);
+  const captchaEnvironment = captchaVariables.length > 0
+    ? `    environment:\n${captchaVariables.map(([name]) => `      ${name}: \${${name}}`).join("\n")}\n`
     : "";
   const captchaVolume = config.captcha.provider === "cap"
     ? "      - ./extensions/CapCaptcha:/var/www/html/extensions/CapCaptcha:ro\n"
@@ -78,12 +76,8 @@ function renderEnvironment(config: WikiConfig): string {
     `DATABASE_PASSWORD=${dotenvQuote(config.databasePassword)}`,
     `DATABASE_ROOT_PASSWORD=${dotenvQuote(crypto.randomUUID().replaceAll("-", ""))}`,
   ];
-  if (config.captcha.provider === "cap") {
-    values.push(
-      `CAP_CAPTCHA_SERVER_URL=${dotenvQuote(config.captcha.serverUrl)}`,
-      `CAP_CAPTCHA_SITE_KEY=${dotenvQuote(config.captcha.siteKey)}`,
-      `CAP_CAPTCHA_SECRET_KEY=${dotenvQuote(config.captcha.secretKey)}`,
-    );
+  for (const [name, value] of captchaEnvironmentVariables(config.captcha)) {
+    values.push(`${name}=${dotenvQuote(value)}`);
   }
   return [...values, ""].join("\n");
 }
@@ -113,6 +107,47 @@ ${renderCaptchaSettings(config.captcha)}
 `;
 }
 
+function renderCaptchaReadme(config: WikiConfig): string {
+  switch (config.captcha.provider) {
+    case "cap":
+      return `
+## Cap CAPTCHA
+
+This wiki uses the self-hosted [Cap CAPTCHA](https://github.com/tiagozip/cap). Keep the Cap asset server enabled and publicly reachable at ${config.captcha.serverUrl}. In the Cap dashboard, allow ${config.siteUrl} as a CORS origin.
+
+Pin the Cap asset server to \`WIDGET_VERSION=0.1.56\` and \`WASM_VERSION=0.0.7\`.
+
+The site secret is stored only in \`.env\`; never paste it into logs or issue reports.
+`;
+    case "turnstile":
+      return `
+## Cloudflare Turnstile
+
+This wiki uses Cloudflare Turnstile through MediaWiki's bundled ConfirmEdit extension. Register the visitor-facing hostname for ${config.siteUrl} in the Cloudflare Turnstile dashboard.
+
+The secret key is stored only in \`.env\`; never paste it into logs or issue reports.
+`;
+    case "hcaptcha":
+      return `
+## hCaptcha
+
+This wiki uses hCaptcha through MediaWiki's bundled ConfirmEdit extension. Register the visitor-facing hostname for ${config.siteUrl} in the hCaptcha dashboard.
+
+The secret key is stored only in \`.env\`; never paste it into logs or issue reports.
+`;
+    case "recaptcha":
+      return `
+## Google reCAPTCHA v2
+
+This wiki uses Google reCAPTCHA v2 through MediaWiki's bundled ConfirmEdit extension. Register the visitor-facing hostname for ${config.siteUrl} in the Google reCAPTCHA admin console.
+
+The secret key is stored only in \`.env\`; never paste it into logs or issue reports.
+`;
+    case "none":
+      return "";
+  }
+}
+
 function renderReadme(config: WikiConfig): string {
   return `# ${config.wikiName}
 
@@ -128,15 +163,7 @@ docker compose down
 Open ${config.siteUrl} after the installation completes.
 
 Configuration secrets are stored in \`.env\`. Keep that file private and back up both Docker volumes regularly.
-${config.captcha.provider === "cap" ? `
-## Cap CAPTCHA
-
-This wiki uses the self-hosted [Cap CAPTCHA](https://github.com/tiagozip/cap). Keep the Cap asset server enabled and publicly reachable at ${config.captcha.serverUrl}. In the Cap dashboard, allow ${config.siteUrl} as a CORS origin.
-
-Pin the Cap asset server to \`WIDGET_VERSION=0.1.56\` and \`WASM_VERSION=0.0.7\`.
-
-The site secret is stored only in \`.env\`; never paste it into logs or issue reports.
-` : ""}
+${renderCaptchaReadme(config)}
 `;
 }
 

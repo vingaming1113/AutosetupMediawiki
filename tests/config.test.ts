@@ -23,7 +23,10 @@ describe("configuration helpers", () => {
   });
 
   test("puts the recommended Cap provider first", () => {
-    expect(CAPTCHA_PROVIDERS[0]).toMatchObject({ value: "cap", recommended: true });
+    expect(CAPTCHA_PROVIDERS.map(({ value }) => value)).toEqual([
+      "cap", "turnstile", "hcaptcha", "recaptcha", "none",
+    ]);
+    expect(CAPTCHA_PROVIDERS.filter(({ recommended }) => recommended)).toEqual([CAPTCHA_PROVIDERS[0]]);
   });
 
   test("validates Cap server URLs and site keys", () => {

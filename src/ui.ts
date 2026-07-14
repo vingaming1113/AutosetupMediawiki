@@ -106,6 +106,16 @@ export async function promptForConfig(): Promise<WikiConfig> {
       message: "Cap secret key", mask: "•", validate: required,
     }));
     captcha = { provider: "cap", serverUrl, siteKey, secretKey };
+  } else if (captchaProvider !== "none") {
+    const providerLabel = CAPTCHA_PROVIDERS.find(({ value }) => value === captchaProvider)?.label
+      ?? captchaProvider;
+    const siteKey = quitIfCancelled(await p.text({
+      message: `${providerLabel} site key`, validate: required,
+    })).trim();
+    const secretKey = quitIfCancelled(await p.password({
+      message: `${providerLabel} secret key`, mask: "•", validate: required,
+    }));
+    captcha = { provider: captchaProvider, siteKey, secretKey };
   }
 
   const adminUser = quitIfCancelled(await p.text({

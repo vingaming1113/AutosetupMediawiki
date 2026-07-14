@@ -18,6 +18,24 @@ export const CAPTCHA_PROVIDERS = [
     hint: "Private, self-hosted proof-of-work · github.com/tiagozip/cap",
     recommended: true,
   },
+  {
+    value: "turnstile",
+    label: "Cloudflare Turnstile",
+    hint: "Managed, usually invisible challenge",
+    recommended: false,
+  },
+  {
+    value: "hcaptcha",
+    label: "hCaptcha",
+    hint: "Managed CAPTCHA challenge service",
+    recommended: false,
+  },
+  {
+    value: "recaptcha",
+    label: "Google reCAPTCHA v2",
+    hint: "Managed by Google; shares visitor data",
+    recommended: false,
+  },
   { value: "none", label: "No CAPTCHA", hint: "You can add one later", recommended: false },
 ] as const;
 
@@ -25,6 +43,9 @@ export type CaptchaProvider = (typeof CAPTCHA_PROVIDERS)[number]["value"];
 
 export type CaptchaConfig =
   | { provider: "cap"; serverUrl: string; siteKey: string; secretKey: string }
+  | { provider: "turnstile"; siteKey: string; secretKey: string }
+  | { provider: "hcaptcha"; siteKey: string; secretKey: string }
+  | { provider: "recaptcha"; siteKey: string; secretKey: string }
   | { provider: "none" };
 
 export interface WikiConfig {

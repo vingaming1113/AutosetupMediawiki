@@ -118,4 +118,66 @@ describe("project generator", () => {
       expect(publicFile).not.toContain(secretKey);
     }
   });
+
+  test("configures bundled managed CAPTCHA providers without leaking their secrets", async () => {
+    const providers = [
+      {
+        provider: "turnstile" as const,
+        label: "Cloudflare Turnstile",
+        extension: "ConfirmEdit/Turnstile",
+        className: "MediaWiki\\Extension\\ConfirmEdit\\Turnstile\\Turnstile::class",
+        siteVariable: "TURNSTILE_SITE_KEY",
+        secretVariable: "TURNSTILE_SECRET_KEY",
+        remoteIpSetting: "$wgTurnstileSendRemoteIP = false;",
+      },
+      {
+        provider: "hcaptcha" as const,
+        label: "hCaptcha",
+        extension: "ConfirmEdit/hCaptcha",
+        className: "MediaWiki\\Extension\\ConfirmEdit\\hCaptcha\\HCaptcha::class",
+        siteVariable: "HCAPTCHA_SITE_KEY",
+        secretVariable: "HCAPTCHA_SECRET_KEY",
+        remoteIpSetting: "$wgHCaptchaSendRemoteIP = false;",
+      },
+      {
+        provider: "recaptcha" as const,
+        label: "Google reCAPTCHA v2",
+        extension: "ConfirmEdit/ReCaptchaNoCaptcha",
+        className: "MediaWiki\\Extension\\ConfirmEdit\\ReCaptchaNoCaptcha\\ReCaptchaNoCaptcha::class",
+        siteVariable: "RECAPTCHA_SITE_KEY",
+        secretVariable: "RECAPTCHA_SECRET_KEY",
+        remoteIpSetting: "$wgReCaptchaSendRemoteIP = false;",
+      },
+    ];
+
+    for (const provider of providers) {
+      const root = await mkdtemp(join(tmpdir(), `mediawiki-autosetup-${provider.provider}-`));
+      temporaryDirectories.push(root);
+      const secretKey = `${provider.provider}-secret-never-publish`;
+      const project = await generateProject({
+        ...config(join(root, "wiki")),
+        captcha: { provider: provider.provider, siteKey: "public-site-key", secretKey },
+      });
+      const compose = await readFile(join(project.directory, "compose.yml"), "utf8");
+      const environment = await readFile(join(project.directory, ".env"), "utf8");
+      const settings = await readFile(join(project.directory, "LocalSettings.autosetup.php"), "utf8");
+      const generatedReadme = await readFile(join(project.directory, "README.md"), "utf8");
+      const parsedCompose = Bun.YAML.parse(compose) as {
+        services: { mediawiki: { environment: Record<string, string> } };
+      };
+
+      expect(parsedCompose.services.mediawiki.environment[provider.siteVariable])
+        .toBe(`\${${provider.siteVariable}}`);
+      expect(environment).toContain(`${provider.secretVariable}='${secretKey}'`);
+      expect(settings).toContain(`'${provider.extension}'`);
+      expect(settings).toContain(provider.className);
+      expect(settings).toContain(provider.remoteIpSetting);
+      expect(settings).toContain("$wgCaptchaTriggers['createaccount'] = true;");
+      expect(generatedReadme).toContain(provider.label);
+      await expect(stat(join(project.directory, "extensions/CapCaptcha"))).rejects.toThrow();
+      for (const publicFile of [compose, settings, generatedReadme]) {
+        expect(publicFile).not.toContain(secretKey);
+      }
+    }
+  });
 });
