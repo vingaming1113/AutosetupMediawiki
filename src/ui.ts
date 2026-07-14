@@ -70,12 +70,12 @@ export async function promptForConfig(): Promise<WikiConfig> {
     },
   })).replace(/\/$/, "");
 
-  const logoPathInput = quitIfCancelled(await p.text({
+  const logoPathInput = (quitIfCancelled(await p.text({
     message: "Logo image path (optional)", placeholder: "./my-logo.png — press Enter to skip",
     validate(value) {
       if (value?.trim() && !existsSync(resolve(value.trim()))) return "That file does not exist. Check the path or leave it blank.";
     },
-  })).trim();
+  })) ?? "").trim();
 
   const extensions = quitIfCancelled(await p.multiselect<ExtensionName>({
     message: "Choose extensions (Space toggles, Enter confirms)", initialValues: recommendedExtensions(), required: false,
