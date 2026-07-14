@@ -19,7 +19,7 @@ body:
         - Generated Docker Compose project
         - Automatic MediaWiki installation
         - Logo or extension configuration
-        - Cap CAPTCHA configuration
+        - CAPTCHA provider configuration
         - Documentation or CI
         - Something else
     validations:
@@ -58,7 +58,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include your OS, architecture, Bun version, Docker versions, and Cap Standalone/widget versions when relevant. Never include a Cap secret or admin key.
+      description: Include your OS, architecture, Bun version, Docker versions, and selected CAPTCHA provider or relevant version when applicable. Never include CAPTCHA secrets or admin keys.
       placeholder: |
         OS: Fedora 42 x86_64
         Bun: 1.3.11
