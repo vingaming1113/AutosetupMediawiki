@@ -1,0 +1,36 @@
+{
+  "name": "mediawiki-autosetup",
+  "version": "0.1.0",
+  "description": "A friendly terminal wizard for creating a ready-to-run MediaWiki installation.",
+  "type": "module",
+  "bin": {
+    "mediawiki-autosetup": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test"
+  },
+  "keywords": [
+    "mediawiki",
+    "installer",
+    "cli",
+    "bun",
+    "docker"
+  ],
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "chalk": "^5.4.1",
+    "gradient-string": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.3"
+  }
+}
+
