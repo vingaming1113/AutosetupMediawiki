@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readdir, writeFile } from "node:fs/promises";
 import { basename, extname, resolve } from "node:path";
 import type { WikiConfig } from "./config";
 
@@ -109,6 +109,7 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
   if (existing.length > 0) throw new Error(`The output directory is not empty: ${directory}`);
 
   await mkdir(resolve(directory, "data/images"), { recursive: true });
+  await chmod(resolve(directory, "data/images"), 0o777);
   let logoFilename: string | undefined;
   if (config.logoPath) {
     const suffix = extname(config.logoPath).toLowerCase() || ".png";
