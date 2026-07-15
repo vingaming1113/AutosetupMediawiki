@@ -132,6 +132,7 @@ The generated stack serves HTTP on the selected port. For a public address such 
 ## Backups and security
 
 - Keep `.env` and `data/cap/credentials.json` private; both locations are ignored by Git.
+- Each generated `.env` uses a unique Compose project name so a regenerated setup cannot silently reuse older named volumes and credentials.
 - Back up the MariaDB and MediaWiki volumes, `data/images/`, and automatic Cap's `cap-valkey-data` volume and `data/cap/` directory.
 - Test backups before changing pinned MediaWiki or MariaDB image versions.
 - Run `bun audit` whenever JavaScript dependencies change.

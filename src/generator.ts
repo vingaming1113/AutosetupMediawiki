@@ -243,6 +243,7 @@ const dotenvQuote = (value: string | number): string => `'${String(value).replac
 
 function renderEnvironment(config: WikiConfig): string {
   const values = [
+    `COMPOSE_PROJECT_NAME=${dotenvQuote(`mediawiki-autosetup-${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`)}`,
     `WIKI_PORT=${dotenvQuote(config.port)}`,
     `WIKI_NAME=${dotenvQuote(config.wikiName)}`,
     `WIKI_LANGUAGE=${dotenvQuote(config.language)}`,

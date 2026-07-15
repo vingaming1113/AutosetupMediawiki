@@ -49,6 +49,7 @@ describe("project generator", () => {
     expect(installer).not.toContain("/dev/stderr");
     expect(installer).not.toContain(input.adminPassword);
     expect(installer).not.toContain(input.databasePassword);
+    expect(environment).toMatch(/^COMPOSE_PROJECT_NAME='mediawiki-autosetup-[a-f0-9]{12}'$/m);
     expect(environment).toContain("WIKI_NAME='Test $ Wiki'");
     expect(environment).toContain("DATABASE_PASSWORD='db$password'");
     expect((await stat(join(project.directory, ".env"))).mode & 0o777).toBe(0o600);
