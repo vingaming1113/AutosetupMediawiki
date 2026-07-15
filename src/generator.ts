@@ -213,8 +213,8 @@ $command = [
 ];
 $descriptors = [
     0 => ['file', '/dev/null', 'r'],
-    1 => ['file', '/dev/stdout', 'w'],
-    2 => ['file', '/dev/stderr', 'w'],
+    1 => STDOUT,
+    2 => STDERR,
 ];
 
 try {

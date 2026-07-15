@@ -43,6 +43,10 @@ describe("project generator", () => {
     expect(installer).toContain("maintenance/run.php', 'install'");
     expect(installer).toContain("--passfile=");
     expect(installer).toContain("--dbpassfile=");
+    expect(installer).toContain("1 => STDOUT");
+    expect(installer).toContain("2 => STDERR");
+    expect(installer).not.toContain("/dev/stdout");
+    expect(installer).not.toContain("/dev/stderr");
     expect(installer).not.toContain(input.adminPassword);
     expect(installer).not.toContain(input.databasePassword);
     expect(environment).toContain("WIKI_NAME='Test $ Wiki'");
