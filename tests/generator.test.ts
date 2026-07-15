@@ -209,9 +209,10 @@ describe("project generator", () => {
     expect(parsedCompose.services.mediawiki.environment.CAP_STANDALONE_ADMIN_KEY).toBeUndefined();
     expect(parsedCompose.services.mediawiki.depends_on["cap-init"]?.condition)
       .toBe("service_completed_successfully");
-    expect(parsedCompose.services.mediawiki.volumes).toContain("./data/cap:/run/cap:ro");
-    expect(parsedCompose.services["cap-init"].volumes).toContain("./data/cap:/cap-data");
+    expect(parsedCompose.services.mediawiki.volumes).toContain("cap-credentials:/run/cap:ro");
+    expect(parsedCompose.services["cap-init"].volumes).toContain("cap-credentials:/cap-data");
     expect(parsedCompose.volumes["cap-valkey-data"]).toBeDefined();
+    expect(parsedCompose.volumes["cap-credentials"]).toBeDefined();
     expect(environment).toContain("CAP_STANDALONE_PORT='3000'");
     expect(environment).toContain(`CAP_STANDALONE_ADMIN_KEY='${adminKey}'`);
     expect(environment).toContain("WIKI_ORIGIN='https://wiki.example.com'");
@@ -222,8 +223,9 @@ describe("project generator", () => {
     expect(initScript).toContain('"/server/keys"');
     expect(initScript).toContain("instrumentation: true");
     expect(initScript).toContain('corsOrigins: [new URL(requiredEnvironment("WIKI_URL")).origin]');
+    expect(initScript).toContain("chmod(credentialsPath, 0o444)");
     expect(generatedReadme).toContain("automatically runs Cap Standalone");
-    expect((await stat(join(project.directory, "data/cap"))).mode & 0o777).toBe(0o700);
+    await expect(stat(join(project.directory, "data/cap"))).rejects.toThrow();
     for (const publicFile of [compose, settings, initScript, generatedReadme]) {
       expect(publicFile).not.toContain(adminKey);
     }

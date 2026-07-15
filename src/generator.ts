@@ -70,15 +70,15 @@ function renderCompose(config: WikiConfig): string {
     entrypoint: ["bun", "run", "/autosetup/cap-init.ts"]
     volumes:
       - ./cap-init.ts:/autosetup/cap-init.ts:ro
-      - ./data/cap:/cap-data
+      - cap-credentials:/cap-data
 ` : "";
   const capDependency = automaticCap
     ? "      cap-init:\n        condition: service_completed_successfully\n"
     : "";
   const capCredentialsVolume = automaticCap
-    ? "      - ./data/cap:/run/cap:ro\n"
+    ? "      - cap-credentials:/run/cap:ro\n"
     : "";
-  const capVolume = automaticCap ? "  cap-valkey-data:\n" : "";
+  const capVolume = automaticCap ? "  cap-valkey-data:\n  cap-credentials:\n" : "";
   return `services:
   database:
     image: mariadb:11.4
@@ -294,7 +294,7 @@ function renderCaptchaReadme(config: WikiConfig): string {
 
 This project automatically runs Cap Standalone at ${config.captcha.serverUrl}. The first start creates a site key with ${new URL(config.siteUrl).origin} as its allowed origin before MediaWiki starts.
 
-The Cap dashboard uses the private \`CAP_STANDALONE_ADMIN_KEY\` in \`.env\`. Generated site credentials are stored in \`data/cap/credentials.json\`. Keep both private and back up the \`cap-valkey-data\` volume.
+The Cap dashboard uses the private \`CAP_STANDALONE_ADMIN_KEY\` in \`.env\`. Generated site credentials are stored in the private \`cap-credentials\` Docker volume. Keep both private and back up the \`cap-valkey-data\` and \`cap-credentials\` volumes.
 `;
       }
       return `
@@ -374,11 +374,6 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
   if (config.captcha.provider === "cap") {
     await mkdir(resolve(directory, "extensions/CapCaptcha/includes"), { recursive: true });
   }
-  if (config.captcha.provider === "cap" && config.captcha.deployment === "automatic") {
-    await mkdir(resolve(directory, "data/cap"), { recursive: true });
-    await chmod(resolve(directory, "data/cap"), 0o700);
-  }
-
   await Promise.all([
     writeFile(resolve(directory, "compose.yml"), renderCompose(config)),
     writeFile(resolve(directory, ".env"), renderEnvironment(config), { mode: 0o600 }),

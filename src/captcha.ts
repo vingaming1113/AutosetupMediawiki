@@ -359,7 +359,7 @@ if (!credentials.siteKey || !credentials.secretKey) {
 
 await writeFile(temporaryPath, JSON.stringify(credentials) + "\\n", { mode: 0o600 });
 await rename(temporaryPath, credentialsPath);
-await chmod(credentialsPath, 0o600);
+await chmod(credentialsPath, 0o444);
 console.log("Cap site key created.");
 `;
 

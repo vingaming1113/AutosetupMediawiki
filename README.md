@@ -76,7 +76,7 @@ After selecting Cap, choose one of two paths:
 
 Automatic setup deliberately pins Cap Standalone `3.1.5`, Valkey `9.0.4-alpine`, widget `0.1.56`, and WASM `0.0.7`. The generated wiki loads the widget from your Cap server, not a third-party CDN, and verifies every submitted token server-side through `/siteverify`.
 
-Cap must be publicly reachable by visitors. For a public wiki, route the chosen Cap URL through your reverse proxy and configure its DNS and TLS. Automatic setup stores the dashboard admin key only in `.env` and the generated site credentials in the ignored `data/cap/credentials.json` file. Existing-server secrets remain only in `.env`.
+Cap must be publicly reachable by visitors. For a public wiki, route the chosen Cap URL through your reverse proxy and configure its DNS and TLS. Automatic setup stores the dashboard admin key only in `.env` and generated site credentials in a dedicated `cap-credentials` Docker volume. Existing-server secrets remain only in `.env`.
 
 See [tiagozip/cap](https://github.com/tiagozip/cap) for Cap's source and documentation.
 
@@ -131,9 +131,9 @@ The generated stack serves HTTP on the selected port. For a public address such 
 
 ## Backups and security
 
-- Keep `.env` and `data/cap/credentials.json` private; both locations are ignored by Git.
+- Keep `.env` and the automatic Cap `cap-credentials` volume private.
 - Each generated `.env` uses a unique Compose project name so a regenerated setup cannot silently reuse older named volumes and credentials.
-- Back up the MariaDB and MediaWiki volumes, `data/images/`, and automatic Cap's `cap-valkey-data` volume and `data/cap/` directory.
+- Back up the MariaDB and MediaWiki volumes, `data/images/`, and automatic Cap's `cap-valkey-data` and `cap-credentials` volumes.
 - Test backups before changing pinned MediaWiki or MariaDB image versions.
 - Run `bun audit` whenever JavaScript dependencies change.
 - Never paste credentials or private URLs into public issue reports.
