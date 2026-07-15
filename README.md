@@ -29,6 +29,7 @@ The cards above are live project statistics from GitHub and Shields.io, so build
 - Guided terminal interface with a cyan, violet, and rose gradient banner
 - Arrow-key menus and a Space-driven extension picker
 - CAPTCHA choices for [Cap.js](https://github.com/tiagozip/cap), Cloudflare Turnstile, hCaptcha, and Google reCAPTCHA v2
+- Automatic Cap Standalone deployment and site-key creation, or connection to an existing Cap server
 - MediaWiki 1.46 and MariaDB 11.4 on official container images
 - Persistent wiki, database, and upload storage
 - Generated database secrets and private `.env` handling
@@ -56,7 +57,7 @@ The wizard lists **Cap.js** first and recommends it as the privacy-friendly, sel
 
 | Provider | Where it runs | What the wizard needs |
 | --- | --- | --- |
-| **Cap.js (recommended)** | Your own Cap Standalone server | Server URL, site key, and secret key |
+| **Cap.js (recommended)** | Generated with the wiki, or your existing server | Automatic: port and public URL; existing: URL and keys |
 | **Cloudflare Turnstile** | Cloudflare | Site key and secret key |
 | **hCaptcha** | hCaptcha | Site key and secret key |
 | **Google reCAPTCHA v2** | Google | Site key and secret key |
@@ -68,15 +69,14 @@ All enabled providers protect account creation, repeated failed logins, and edit
 
 ### Cap.js setup
 
-To select Cap, first create a site key in a publicly reachable [Cap Standalone](https://trycap.dev/guide/standalone/) deployment. The wizard asks for:
+After selecting Cap, choose one of two paths:
 
-- the public Cap server URL;
-- the site key;
-- the matching secret key.
+- **Set up Cap automatically** asks for a local port and the public URL browsers will use. The generated stack runs Cap Standalone and Valkey, creates a site key with instrumentation enabled, and allows the wiki's visitor-facing origin.
+- **Use an existing Cap server** asks for its public URL, site key, and matching secret key.
 
-Enable Cap Standalone's asset server and pin its widget and WASM versions. This project is tested against Cap Standalone `3.1.5`, widget `0.1.56`, and WASM `0.0.7`. The generated wiki loads the widget from your Cap server—not a third-party CDN—and verifies every submitted token server-side through `/siteverify`.
+Automatic setup deliberately pins Cap Standalone `3.1.5`, Valkey `9.0.4-alpine`, widget `0.1.56`, and WASM `0.0.7`. The generated wiki loads the widget from your Cap server, not a third-party CDN, and verifies every submitted token server-side through `/siteverify`.
 
-Every provider's secret key is written only to the private generated `.env` file. Generated Compose, PHP, adapter, and README files contain only environment-variable references. For Cap, configure the wiki's visitor-facing URL as an allowed CORS origin in the Cap dashboard.
+Cap must be publicly reachable by visitors. For a public wiki, route the chosen Cap URL through your reverse proxy and configure its DNS and TLS. Automatic setup stores the dashboard admin key only in `.env` and the generated site credentials in the ignored `data/cap/credentials.json` file. Existing-server secrets remain only in `.env`.
 
 See [tiagozip/cap](https://github.com/tiagozip/cap) for Cap's source and documentation.
 
@@ -104,9 +104,10 @@ The default output directory is `./mediawiki-setup`. When automatic installation
 
 | File | Purpose |
 | --- | --- |
-| `compose.yml` | MediaWiki and MariaDB services |
+| `compose.yml` | MediaWiki, MariaDB, and optional automatic Cap services |
 | `.env` | Port, setup values, database secrets, and optional CAPTCHA credentials |
 | `install.php` | One-time unattended installer run inside the MediaWiki container |
+| `cap-init.ts` | Idempotent Cap site-key bootstrap, generated only for automatic Cap setup |
 | `LocalSettings.autosetup.php` | Wiki name, URL, logo, uploads, extensions, and CAPTCHA settings |
 | `extensions/CapCaptcha/` | Server-validated ConfirmEdit adapter, generated only when Cap is selected |
 | `data/images/` | Persistent uploads and the optional logo |
@@ -130,8 +131,8 @@ The generated stack serves HTTP on the selected port. For a public address such 
 
 ## Backups and security
 
-- Keep `.env` private; it contains passwords and is ignored by Git.
-- Back up the MariaDB and MediaWiki volumes plus `data/images/`.
+- Keep `.env` and `data/cap/credentials.json` private; both locations are ignored by Git.
+- Back up the MariaDB and MediaWiki volumes, `data/images/`, and automatic Cap's `cap-valkey-data` volume and `data/cap/` directory.
 - Test backups before changing pinned MediaWiki or MariaDB image versions.
 - Run `bun audit` whenever JavaScript dependencies change.
 - Never paste credentials or private URLs into public issue reports.
@@ -156,8 +157,10 @@ If setup stops while Docker is starting, enter the generated directory and run:
 
 ```sh
 docker compose ps
-docker compose logs database mediawiki
+docker compose logs database mediawiki mediawiki-install
 ```
+
+For automatic Cap setup, also run `docker compose logs cap cap-init cap-valkey`.
 
 For a port conflict, run the wizard again with a different port and a new output directory.
 

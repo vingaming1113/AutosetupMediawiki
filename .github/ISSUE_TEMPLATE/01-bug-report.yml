@@ -58,7 +58,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include your OS, architecture, Bun version, Docker versions, and selected CAPTCHA provider or relevant version when applicable. Never include CAPTCHA secrets or admin keys.
+      description: Include your OS, architecture, Bun version, Docker versions, selected CAPTCHA provider, and automatic or existing Cap mode when applicable. Never include CAPTCHA secrets or admin keys.
       placeholder: |
         OS: Fedora 42 x86_64
         Bun: 1.3.11

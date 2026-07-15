@@ -46,9 +46,16 @@ class CapCaptcha extends SimpleCaptcha {
         return rtrim( $wgCapCaptchaServerUrl, '/' ) . '/assets/widget.js';
     }
 
+    public static function getVerificationEndpoint(): string {
+        global $wgCapCaptchaInternalServerUrl, $wgCapCaptchaServerUrl, $wgCapCaptchaSiteKey;
+        $serverUrl = $wgCapCaptchaInternalServerUrl ?? $wgCapCaptchaServerUrl;
+        return rtrim( $serverUrl, '/' ) . '/' . rawurlencode( $wgCapCaptchaSiteKey ) . '/siteverify';
+    }
+
     public static function getWidgetScriptTag(): string {
         return Html::rawElement( 'script', [
             'src' => self::getWidgetScriptUrl(),
+            'type' => 'module',
             'defer' => true,
         ], '' );
     }
@@ -103,7 +110,7 @@ class CapCaptcha extends SimpleCaptcha {
         }
 
         $request = MediaWikiServices::getInstance()->getHttpRequestFactory()->create(
-            self::getApiEndpoint() . 'siteverify',
+            self::getVerificationEndpoint(),
             [
                 'method' => 'POST',
                 'postData' => [
@@ -263,7 +270,11 @@ class HTMLCapCaptchaField extends HTMLFormField {
         $out = $this->mParent->getOutput();
         $out->addHeadItem(
             'cap-captcha-widget',
-            Html::rawElement( 'script', [ 'src' => $this->scriptUrl, 'defer' => true ], '' )
+            Html::rawElement( 'script', [
+                'src' => $this->scriptUrl,
+                'type' => 'module',
+                'defer' => true,
+            ], '' )
         );
         CapCaptcha::addCSPSources( $out->getCSP() );
 
@@ -277,6 +288,81 @@ class HTMLCapCaptchaField extends HTMLFormField {
 }
 `;
 
+export const CAP_INIT_SCRIPT = `import { chmod, rename, writeFile } from "node:fs/promises";
+
+const credentialsPath = "/cap-data/credentials.json";
+const temporaryPath = "/cap-data/credentials.json.tmp";
+const capUrl = "http://cap:3000";
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error("Missing required Cap setup value: " + name);
+  return value;
+}
+
+async function logIn(): Promise<string> {
+  const response = await fetch(capUrl + "/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ admin_key: requiredEnvironment("CAP_STANDALONE_ADMIN_KEY") }),
+  });
+  if (!response.ok) throw new Error("Cap login is not ready.");
+  const session = await response.json() as { session_token?: string; hashed_token?: string };
+  if (!session.session_token || !session.hashed_token) throw new Error("Cap login failed.");
+  return Buffer.from(JSON.stringify({
+    token: session.session_token,
+    hash: session.hashed_token,
+  })).toString("base64");
+}
+
+let authorization = "";
+for (let attempt = 0; attempt < 60; attempt++) {
+  try {
+    authorization = "Bearer " + await logIn();
+    break;
+  } catch {
+    if (attempt === 59) throw new Error("Cap did not become ready within two minutes.");
+    await Bun.sleep(2_000);
+  }
+}
+
+let existingCredentials: { siteKey: string; secretKey: string } | undefined;
+try {
+  existingCredentials = JSON.parse(await Bun.file(credentialsPath).text());
+} catch {
+  existingCredentials = undefined;
+}
+
+const headers = { authorization, "content-type": "application/json" };
+const keysResponse = await fetch(capUrl + "/server/keys", { headers });
+if (!keysResponse.ok) throw new Error("Could not inspect Cap site keys.");
+const keys = await keysResponse.json() as Array<{ siteKey?: string }>;
+if (existingCredentials && keys.some(({ siteKey }) => siteKey === existingCredentials?.siteKey)) {
+  console.log("Cap site key is already configured.");
+  process.exit(0);
+}
+
+const createResponse = await fetch(capUrl + "/server/keys", {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    name: "MediaWiki Autosetup",
+    instrumentation: true,
+    corsOrigins: [new URL(requiredEnvironment("WIKI_URL")).origin],
+  }),
+});
+if (!createResponse.ok) throw new Error("Could not create the Cap site key.");
+const credentials = await createResponse.json() as { siteKey?: string; secretKey?: string };
+if (!credentials.siteKey || !credentials.secretKey) {
+  throw new Error("Cap returned incomplete site credentials.");
+}
+
+await writeFile(temporaryPath, JSON.stringify(credentials) + "\\n", { mode: 0o600 });
+await rename(temporaryPath, credentialsPath);
+await chmod(credentialsPath, 0o600);
+console.log("Cap site key created.");
+`;
+
 export function renderCaptchaSettings(captcha: CaptchaConfig): string {
   if (captcha.provider === "none") return "";
   const triggers = `
@@ -284,6 +370,24 @@ $wgCaptchaTriggers['createaccount'] = true;
 $wgCaptchaTriggers['badlogin'] = true;
 $wgCaptchaTriggers['addurl'] = true;
 `;
+  if (captcha.provider === "cap" && captcha.deployment === "automatic") return `
+// Automatically managed Cap CAPTCHA through ConfirmEdit
+$capCredentialsJson = file_get_contents( '/run/cap/credentials.json' );
+$capCredentials = is_string( $capCredentialsJson )
+    ? json_decode( $capCredentialsJson, true )
+    : null;
+if ( !is_array( $capCredentials )
+    || !isset( $capCredentials['siteKey'], $capCredentials['secretKey'] )
+) {
+    throw new RuntimeException( 'Automatic Cap credentials are missing or invalid.' );
+}
+$wgCapCaptchaServerUrl = getenv( 'CAP_CAPTCHA_SERVER_URL' );
+$wgCapCaptchaInternalServerUrl = 'http://cap:3000';
+$wgCapCaptchaSiteKey = $capCredentials['siteKey'];
+$wgCapCaptchaSecretKey = $capCredentials['secretKey'];
+wfLoadExtensions( [ 'ConfirmEdit', 'CapCaptcha' ] );
+$wgCaptchaClass = MediaWiki\\Extension\\CapCaptcha\\CapCaptcha::class;
+${triggers}`;
   if (captcha.provider === "cap") return `
 // Self-hosted Cap CAPTCHA through ConfirmEdit
 $wgCapCaptchaServerUrl = getenv( 'CAP_CAPTCHA_SERVER_URL' );
@@ -321,6 +425,13 @@ ${triggers}`;
 export function captchaEnvironmentVariables(captcha: CaptchaConfig): Array<[string, string]> {
   switch (captcha.provider) {
     case "cap":
+      if (captcha.deployment === "automatic") {
+        return [
+          ["CAP_CAPTCHA_SERVER_URL", captcha.serverUrl],
+          ["CAP_STANDALONE_PORT", String(captcha.port)],
+          ["CAP_STANDALONE_ADMIN_KEY", captcha.adminKey],
+        ];
+      }
       return [
         ["CAP_CAPTCHA_SERVER_URL", captcha.serverUrl],
         ["CAP_CAPTCHA_SITE_KEY", captcha.siteKey],
@@ -346,9 +457,18 @@ export function captchaEnvironmentVariables(captcha: CaptchaConfig): Array<[stri
   }
 }
 
+export function mediaWikiCaptchaEnvironmentNames(captcha: CaptchaConfig): string[] {
+  if (captcha.provider === "cap" && captcha.deployment === "automatic") {
+    return ["CAP_CAPTCHA_SERVER_URL"];
+  }
+  return captchaEnvironmentVariables(captcha).map(([name]) => name);
+}
+
 export function captchaLabel(captcha: CaptchaConfig): string {
   switch (captcha.provider) {
-    case "cap": return "Cap.js (self-hosted)";
+    case "cap": return captcha.deployment === "automatic"
+      ? "Cap.js (automatic server)"
+      : "Cap.js (existing server)";
     case "turnstile": return "Cloudflare Turnstile";
     case "hcaptcha": return "hCaptcha";
     case "recaptcha": return "Google reCAPTCHA v2";

@@ -100,6 +100,7 @@ describe("project generator", () => {
       ...config(join(root, "wiki")),
       captcha: {
         provider: "cap",
+        deployment: "existing",
         serverUrl: "https://cap.example.com",
         siteKey: "d9256640cb53",
         secretKey,
@@ -129,6 +130,8 @@ describe("project generator", () => {
     const manifest = JSON.parse(manifestText) as Record<string, unknown>;
 
     expect(compose).toContain("./extensions/CapCaptcha:/var/www/html/extensions/CapCaptcha:ro");
+    expect(compose).not.toContain("tiago2/cap");
+    expect(compose).not.toContain("cap-valkey");
     expect(compose).toContain("CAP_CAPTCHA_SECRET_KEY: ${CAP_CAPTCHA_SECRET_KEY}");
     expect(parsedCompose.services.mediawiki.environment.CAP_CAPTCHA_SITE_KEY).toBe("${CAP_CAPTCHA_SITE_KEY}");
     expect(parsedCompose.services.mediawiki.volumes).toContain(
@@ -138,12 +141,86 @@ describe("project generator", () => {
     expect(settings).toContain("MediaWiki\\Extension\\CapCaptcha\\CapCaptcha::class");
     expect(settings).not.toContain("ReCaptchaNoCaptcha");
     expect(adapter).toContain("siteverify");
+    expect(adapter).toContain("getVerificationEndpoint");
+    expect(adapter).toContain("'type' => 'module'");
     expect(authentication).toContain("class CapCaptchaAuthenticationRequest");
     expect(field).toContain("data-cap-hidden-field-name");
     expect(manifest["license-name"]).toBe("MIT");
     expect(generatedReadme).toContain("WIDGET_VERSION=0.1.56");
+    await expect(stat(join(project.directory, "cap-init.ts"))).rejects.toThrow();
     for (const publicFile of [compose, settings, generatedReadme, manifestText, adapter, authentication, field]) {
       expect(publicFile).not.toContain(secretKey);
+    }
+  });
+
+  test("automatically provisions a private Cap server and site key", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mediawiki-autosetup-cap-auto-"));
+    temporaryDirectories.push(root);
+    const adminKey = "cap-admin-secret-never-publish";
+    const project = await generateProject({
+      ...config(join(root, "wiki")),
+      siteUrl: "https://wiki.example.com/community",
+      captcha: {
+        provider: "cap",
+        deployment: "automatic",
+        serverUrl: "https://cap.example.com",
+        port: 3000,
+        adminKey,
+      },
+    });
+    const compose = await readFile(join(project.directory, "compose.yml"), "utf8");
+    const environment = await readFile(join(project.directory, ".env"), "utf8");
+    const settings = await readFile(join(project.directory, "LocalSettings.autosetup.php"), "utf8");
+    const initScript = await readFile(join(project.directory, "cap-init.ts"), "utf8");
+    const generatedReadme = await readFile(join(project.directory, "README.md"), "utf8");
+    const parsedCompose = Bun.YAML.parse(compose) as {
+      services: {
+        cap: {
+          image: string;
+          ports: string[];
+          environment: Record<string, string>;
+          depends_on: Record<string, { condition: string }>;
+        };
+        "cap-valkey": { image: string; volumes: string[] };
+        "cap-init": { image: string; environment: Record<string, string>; volumes: string[] };
+        mediawiki: {
+          environment: Record<string, string>;
+          depends_on: Record<string, { condition: string }>;
+          volumes: string[];
+        };
+      };
+      volumes: Record<string, unknown>;
+    };
+
+    expect(parsedCompose.services.cap.image).toBe("tiago2/cap:3.1.5");
+    expect(parsedCompose.services["cap-init"].image).toBe("tiago2/cap:3.1.5");
+    expect(parsedCompose.services["cap-valkey"].image).toBe("valkey/valkey:9.0.4-alpine");
+    expect(parsedCompose.services.cap.ports).toContain("${CAP_STANDALONE_PORT}:3000");
+    expect(parsedCompose.services.cap.environment.ADMIN_KEY).toBe("${CAP_STANDALONE_ADMIN_KEY}");
+    expect(parsedCompose.services.cap.environment.WIDGET_VERSION).toBe("0.1.56");
+    expect(parsedCompose.services.cap.environment.WASM_VERSION).toBe("0.0.7");
+    expect(parsedCompose.services.mediawiki.environment.CAP_CAPTCHA_SERVER_URL)
+      .toBe("${CAP_CAPTCHA_SERVER_URL}");
+    expect(parsedCompose.services.mediawiki.environment.CAP_STANDALONE_ADMIN_KEY).toBeUndefined();
+    expect(parsedCompose.services.mediawiki.depends_on["cap-init"]?.condition)
+      .toBe("service_completed_successfully");
+    expect(parsedCompose.services.mediawiki.volumes).toContain("./data/cap:/run/cap:ro");
+    expect(parsedCompose.services["cap-init"].volumes).toContain("./data/cap:/cap-data");
+    expect(parsedCompose.volumes["cap-valkey-data"]).toBeDefined();
+    expect(environment).toContain("CAP_STANDALONE_PORT='3000'");
+    expect(environment).toContain(`CAP_STANDALONE_ADMIN_KEY='${adminKey}'`);
+    expect(environment).toContain("WIKI_ORIGIN='https://wiki.example.com'");
+    expect(settings).toContain("file_get_contents( '/run/cap/credentials.json' )");
+    expect(settings).toContain("$wgCapCaptchaInternalServerUrl = 'http://cap:3000';");
+    expect(settings).not.toContain("getenv( 'CAP_CAPTCHA_SITE_KEY' )");
+    expect(initScript).toContain('"/auth/login"');
+    expect(initScript).toContain('"/server/keys"');
+    expect(initScript).toContain("instrumentation: true");
+    expect(initScript).toContain('corsOrigins: [new URL(requiredEnvironment("WIKI_URL")).origin]');
+    expect(generatedReadme).toContain("automatically runs Cap Standalone");
+    expect((await stat(join(project.directory, "data/cap"))).mode & 0o777).toBe(0o700);
+    for (const publicFile of [compose, settings, initScript, generatedReadme]) {
+      expect(publicFile).not.toContain(adminKey);
     }
   });
 

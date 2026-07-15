@@ -4,9 +4,9 @@ import gradient from "gradient-string";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  CAPTCHA_PROVIDERS, EXTENSIONS, generatePassword, recommendedExtensions,
+  CAP_DEPLOYMENTS, CAPTCHA_PROVIDERS, EXTENSIONS, generatePassword, recommendedExtensions,
   validateCapServerUrl, validateCapSiteKey,
-  type CaptchaConfig, type CaptchaProvider, type ExtensionName, type WikiConfig,
+  type CapDeployment, type CaptchaConfig, type CaptchaProvider, type ExtensionName, type WikiConfig,
 } from "./config";
 
 const banner = [
@@ -94,18 +94,51 @@ export async function promptForConfig(): Promise<WikiConfig> {
 
   let captcha: CaptchaConfig = { provider: "none" };
   if (captchaProvider === "cap") {
-    const serverUrl = quitIfCancelled(await p.text({
-      message: "Public URL of your Cap Standalone server",
-      placeholder: "https://cap.example.com",
-      validate: validateCapServerUrl,
-    })).trim().replace(/\/+$/, "");
-    const siteKey = quitIfCancelled(await p.text({
-      message: "Cap site key", validate: validateCapSiteKey,
-    })).trim();
-    const secretKey = quitIfCancelled(await p.password({
-      message: "Cap secret key", mask: "•", validate: required,
+    const deployment = quitIfCancelled(await p.select<CapDeployment>({
+      message: "How should Cap be set up?",
+      initialValue: "automatic",
+      options: CAP_DEPLOYMENTS.map(({ value, label, hint }) => ({ value, label, hint })),
     }));
-    captcha = { provider: "cap", serverUrl, siteKey, secretKey };
+    if (deployment === "automatic") {
+      const suggestedPort = port === 3000 ? 3001 : 3000;
+      const capPortText = quitIfCancelled(await p.text({
+        message: "Which local port should Cap use?",
+        initialValue: String(suggestedPort),
+        validate(value) {
+          const capPort = Number(value);
+          if (!Number.isInteger(capPort) || capPort < 1 || capPort > 65535) {
+            return "Enter a port between 1 and 65535.";
+          }
+          if (capPort === port) return "Choose a different port from MediaWiki.";
+        },
+      }));
+      const capPort = Number(capPortText);
+      const serverUrl = quitIfCancelled(await p.text({
+        message: "What public URL will browsers use for Cap?",
+        initialValue: `http://localhost:${capPort}`,
+        validate: validateCapServerUrl,
+      })).trim().replace(/\/+$/, "");
+      captcha = {
+        provider: "cap",
+        deployment,
+        serverUrl,
+        port: capPort,
+        adminKey: generatePassword(40),
+      };
+    } else {
+      const serverUrl = quitIfCancelled(await p.text({
+        message: "Public URL of your Cap Standalone server",
+        placeholder: "https://cap.example.com",
+        validate: validateCapServerUrl,
+      })).trim().replace(/\/+$/, "");
+      const siteKey = quitIfCancelled(await p.text({
+        message: "Cap site key", validate: validateCapSiteKey,
+      })).trim();
+      const secretKey = quitIfCancelled(await p.password({
+        message: "Cap secret key", mask: "•", validate: required,
+      }));
+      captcha = { provider: "cap", deployment, serverUrl, siteKey, secretKey };
+    }
   } else if (captchaProvider !== "none") {
     const providerLabel = CAPTCHA_PROVIDERS.find(({ value }) => value === captchaProvider)?.label
       ?? captchaProvider;

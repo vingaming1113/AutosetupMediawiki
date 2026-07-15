@@ -41,8 +41,24 @@ export const CAPTCHA_PROVIDERS = [
 
 export type CaptchaProvider = (typeof CAPTCHA_PROVIDERS)[number]["value"];
 
+export const CAP_DEPLOYMENTS = [
+  {
+    value: "automatic",
+    label: "Set up Cap automatically",
+    hint: "Run a private Cap server with this wiki",
+  },
+  {
+    value: "existing",
+    label: "Use an existing Cap server",
+    hint: "Connect with an existing site key",
+  },
+] as const;
+
+export type CapDeployment = (typeof CAP_DEPLOYMENTS)[number]["value"];
+
 export type CaptchaConfig =
-  | { provider: "cap"; serverUrl: string; siteKey: string; secretKey: string }
+  | { provider: "cap"; deployment: "existing"; serverUrl: string; siteKey: string; secretKey: string }
+  | { provider: "cap"; deployment: "automatic"; serverUrl: string; port: number; adminKey: string }
   | { provider: "turnstile"; siteKey: string; secretKey: string }
   | { provider: "hcaptcha"; siteKey: string; secretKey: string }
   | { provider: "recaptcha"; siteKey: string; secretKey: string }
@@ -89,7 +105,6 @@ export function generatePassword(length = 24): string {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 }
-
 
 
 

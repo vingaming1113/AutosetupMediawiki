@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  CAP_DEPLOYMENTS,
   CAPTCHA_PROVIDERS,
   generatePassword,
   recommendedExtensions,
@@ -27,6 +28,7 @@ describe("configuration helpers", () => {
       "cap", "turnstile", "hcaptcha", "recaptcha", "none",
     ]);
     expect(CAPTCHA_PROVIDERS.filter(({ recommended }) => recommended)).toEqual([CAPTCHA_PROVIDERS[0]]);
+    expect(CAP_DEPLOYMENTS.map(({ value }) => value)).toEqual(["automatic", "existing"]);
   });
 
   test("validates Cap server URLs and site keys", () => {

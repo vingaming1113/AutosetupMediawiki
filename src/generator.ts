@@ -5,7 +5,9 @@ import {
   CAP_CAPTCHA_CLASS,
   CAP_CAPTCHA_FIELD,
   CAP_EXTENSION_MANIFEST,
+  CAP_INIT_SCRIPT,
   captchaEnvironmentVariables,
+  mediaWikiCaptchaEnvironmentNames,
   renderCaptchaSettings,
 } from "./captcha";
 import type { WikiConfig } from "./config";
@@ -18,13 +20,65 @@ export interface GeneratedProject {
 const phpQuote = (value: string): string => value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 
 function renderCompose(config: WikiConfig): string {
-  const captchaVariables = captchaEnvironmentVariables(config.captcha);
-  const captchaEnvironment = captchaVariables.length > 0
-    ? `    environment:\n${captchaVariables.map(([name]) => `      ${name}: \${${name}}`).join("\n")}\n`
+  const captchaVariableNames = mediaWikiCaptchaEnvironmentNames(config.captcha);
+  const captchaEnvironment = captchaVariableNames.length > 0
+    ? `    environment:\n${captchaVariableNames.map((name) => `      ${name}: \${${name}}`).join("\n")}\n`
     : "";
   const captchaVolume = config.captcha.provider === "cap"
     ? "      - ./extensions/CapCaptcha:/var/www/html/extensions/CapCaptcha:ro\n"
     : "";
+  const automaticCap = config.captcha.provider === "cap" && config.captcha.deployment === "automatic";
+  const capServices = automaticCap ? `
+  cap-valkey:
+    image: valkey/valkey:9.0.4-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "60", "1", "--loglevel", "warning", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - cap-valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  cap:
+    image: tiago2/cap:3.1.5
+    restart: unless-stopped
+    ports:
+      - "\${CAP_STANDALONE_PORT}:3000"
+    environment:
+      ADMIN_KEY: \${CAP_STANDALONE_ADMIN_KEY}
+      REDIS_URL: redis://cap-valkey:6379
+      CORS_ORIGIN: \${WIKI_ORIGIN}
+      ENABLE_ASSETS_SERVER: "true"
+      WIDGET_VERSION: "0.1.56"
+      WASM_VERSION: "0.0.7"
+    depends_on:
+      cap-valkey:
+        condition: service_healthy
+
+  cap-init:
+    image: tiago2/cap:3.1.5
+    user: "0:0"
+    restart: "no"
+    depends_on:
+      cap:
+        condition: service_started
+    environment:
+      CAP_STANDALONE_ADMIN_KEY: \${CAP_STANDALONE_ADMIN_KEY}
+      WIKI_URL: \${WIKI_URL}
+    entrypoint: ["bun", "run", "/autosetup/cap-init.ts"]
+    volumes:
+      - ./cap-init.ts:/autosetup/cap-init.ts:ro
+      - ./data/cap:/cap-data
+` : "";
+  const capDependency = automaticCap
+    ? "      cap-init:\n        condition: service_completed_successfully\n"
+    : "";
+  const capCredentialsVolume = automaticCap
+    ? "      - ./data/cap:/run/cap:ro\n"
+    : "";
+  const capVolume = automaticCap ? "  cap-valkey-data:\n" : "";
   return `services:
   database:
     image: mariadb:11.4
@@ -41,6 +95,7 @@ function renderCompose(config: WikiConfig): string {
       interval: 5s
       timeout: 5s
       retries: 20
+${capServices}
 
   mediawiki-install:
     image: mediawiki:1.46.0
@@ -71,16 +126,17 @@ function renderCompose(config: WikiConfig): string {
         condition: service_healthy
       mediawiki-install:
         condition: service_completed_successfully
-${captchaEnvironment}
+${capDependency}${captchaEnvironment}
     volumes:
       - wiki-data:/var/www/html
       - ./data/images:/var/www/html/images
       - ./LocalSettings.autosetup.php:/var/www/html/LocalSettings.autosetup.php:ro
-${captchaVolume}
+${captchaVolume}${capCredentialsVolume}
 
 volumes:
   database-data:
   wiki-data:
+${capVolume}
 `;
 }
 
@@ -191,6 +247,7 @@ function renderEnvironment(config: WikiConfig): string {
     `WIKI_NAME=${dotenvQuote(config.wikiName)}`,
     `WIKI_LANGUAGE=${dotenvQuote(config.language)}`,
     `WIKI_URL=${dotenvQuote(config.siteUrl)}`,
+    `WIKI_ORIGIN=${dotenvQuote(new URL(config.siteUrl).origin)}`,
     `WIKI_ADMIN=${dotenvQuote(config.adminUser)}`,
     `WIKI_ADMIN_PASSWORD=${dotenvQuote(config.adminPassword)}`,
     `DATABASE_PASSWORD=${dotenvQuote(config.databasePassword)}`,
@@ -230,6 +287,15 @@ ${renderCaptchaSettings(config.captcha)}
 function renderCaptchaReadme(config: WikiConfig): string {
   switch (config.captcha.provider) {
     case "cap":
+      if (config.captcha.deployment === "automatic") {
+        return `
+## Cap CAPTCHA
+
+This project automatically runs Cap Standalone at ${config.captcha.serverUrl}. The first start creates a site key with ${new URL(config.siteUrl).origin} as its allowed origin before MediaWiki starts.
+
+The Cap dashboard uses the private \`CAP_STANDALONE_ADMIN_KEY\` in \`.env\`. Generated site credentials are stored in \`data/cap/credentials.json\`. Keep both private and back up the \`cap-valkey-data\` volume.
+`;
+      }
       return `
 ## Cap CAPTCHA
 
@@ -284,7 +350,7 @@ Open ${config.siteUrl} after the installation completes.
 
 The first \`docker compose up -d\` automatically creates \`LocalSettings.php\` and installs MediaWiki. Follow progress with \`docker compose logs -f mediawiki-install mediawiki\`.
 
-Configuration secrets are stored in \`.env\`. Keep that file private and back up both Docker volumes regularly.
+Configuration secrets are stored in \`.env\` and ignored files under \`data/\`. Keep them private and back up all persistent storage regularly.
 ${renderCaptchaReadme(config)}
 `;
 }
@@ -307,6 +373,10 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
   if (config.captcha.provider === "cap") {
     await mkdir(resolve(directory, "extensions/CapCaptcha/includes"), { recursive: true });
   }
+  if (config.captcha.provider === "cap" && config.captcha.deployment === "automatic") {
+    await mkdir(resolve(directory, "data/cap"), { recursive: true });
+    await chmod(resolve(directory, "data/cap"), 0o700);
+  }
 
   await Promise.all([
     writeFile(resolve(directory, "compose.yml"), renderCompose(config)),
@@ -315,6 +385,9 @@ export async function generateProject(config: WikiConfig): Promise<GeneratedProj
     writeFile(resolve(directory, "LocalSettings.autosetup.php"), renderSettings(config, logoFilename)),
     writeFile(resolve(directory, ".gitignore"), ".env\ndata/\n"),
     writeFile(resolve(directory, "README.md"), renderReadme(config)),
+    ...(config.captcha.provider === "cap" && config.captcha.deployment === "automatic"
+      ? [writeFile(resolve(directory, "cap-init.ts"), CAP_INIT_SCRIPT)]
+      : []),
     ...(config.captcha.provider === "cap" ? [
       writeFile(resolve(directory, "extensions/CapCaptcha/extension.json"), CAP_EXTENSION_MANIFEST),
       writeFile(resolve(directory, "extensions/CapCaptcha/includes/CapCaptcha.php"), CAP_CAPTCHA_CLASS),
