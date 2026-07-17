@@ -1,0 +1,137 @@
+name: Setup failure
+description: Report a failed generated Docker or MediaWiki installation
+title: "[Setup]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when the wizard creates files but Docker, MediaWiki, MariaDB, or CAPTCHA startup fails.
+
+        Before posting, remove passwords, tokens, `.env` contents, Cap admin keys, CAPTCHA secrets, private URLs, and public IPs you do not want to share.
+
+  - type: dropdown
+    id: failure_stage
+    attributes:
+      label: Where did setup fail?
+      description: Choose the closest stage. If you are unsure, choose the last thing you saw before the failure.
+      options:
+        - Wizard prompts before files were created
+        - Project files were generated, but Docker did not start
+        - MariaDB did not become healthy
+        - MediaWiki installer failed
+        - MediaWiki container did not keep running
+        - Cap automatic setup failed
+        - Existing CAPTCHA provider configuration failed
+        - The wiki opened but login or editing failed
+        - I am not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: docker_available
+    attributes:
+      label: Was Docker Compose available during setup?
+      description: The wizard should keep generated files even when Docker is missing.
+      options:
+        - Yes, Docker Compose was available
+        - No, Docker Compose was missing
+        - Docker was installed but not running
+        - I am not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the choices needed to reproduce the failure. Do not include passwords or secret keys.
+      placeholder: |
+        1. Run `bun start`
+        2. Wiki URL: http://localhost:8080
+        3. CAPTCHA: Cap.js automatic setup
+        4. Start with Docker: yes
+        5. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: generated_files
+    attributes:
+      label: Generated files present
+      description: Paste the generated project file list only. Do not paste `.env`, `LocalSettings.php`, database files, uploads, or private logo assets.
+      placeholder: |
+        compose.yml
+        install.php
+        LocalSettings.autosetup.php
+        README.md
+        cap-init.ts
+        extensions/CapCaptcha/...
+      render: text
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include versions and platform details. Never include secrets.
+      placeholder: |
+        OS:
+        Architecture:
+        Bun: `bun --version`
+        Docker: `docker --version`
+        Docker Compose: `docker compose version`
+        Autosetup version or commit: `bun run src/index.ts --version`
+    validations:
+      required: true
+
+  - type: textarea
+    id: docker_status
+    attributes:
+      label: Docker status
+      description: From inside the generated project, paste sanitized output from `docker compose ps`. Remove private hostnames or ports if needed.
+      render: shell
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant sanitized logs
+      description: Paste the smallest useful excerpt from `docker compose logs database mediawiki-install mediawiki`. For automatic Cap setup, also check `docker compose logs cap cap-init cap-valkey`.
+      placeholder: |
+        Remove:
+        - passwords
+        - database secrets
+        - CAPTCHA secret keys
+        - Cap admin keys
+        - complete .env contents
+      render: shell
+
+  - type: textarea
+    id: captcha
+    attributes:
+      label: CAPTCHA configuration
+      description: Which provider did you choose? For Cap, say automatic or existing. Include public provider names only, not site keys or secret keys.
+      placeholder: |
+        Provider: Cap.js
+        Mode: automatic
+        Public URL shape: localhost / private domain / public HTTPS domain
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checklist
+      options:
+        - label: I searched existing issues for the same setup failure.
+          required: true
+        - label: I did not paste `.env`, passwords, tokens, CAPTCHA secrets, Cap admin keys, or database contents.
+          required: true
+        - label: I understand generated files should not be deleted when Docker is missing or setup fails.
+          required: true
