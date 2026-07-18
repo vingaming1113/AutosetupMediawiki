@@ -164,14 +164,10 @@ export async function promptForConfig(): Promise<WikiConfig> {
     message: "Where should setup files be created?", initialValue: "./mediawiki-setup", validate: required,
   })).trim();
 
-  const installNow = quitIfCancelled(await p.confirm({
-    message: "Start the wiki with Docker after creating the files?", initialValue: true,
-  }));
-
   return {
     wikiName, language, port, siteUrl, adminUser, adminPassword,
     databasePassword: generatePassword(), logoPath: logoPathInput || undefined,
-    extensions, captcha, outputDirectory, installNow,
+    extensions, captcha, outputDirectory,
   };
 }
  

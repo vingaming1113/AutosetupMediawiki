@@ -18,23 +18,12 @@ async function runDocker(directory: string, args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-async function waitForMediaWiki(directory: string): Promise<void> {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const running = await runDocker(directory, ["ps", "--status", "running", "--services"]);
-    if (running.split("\n").includes("mediawiki")) return;
-    await Bun.sleep(2_000);
-  }
-  throw new Error("MediaWiki did not become ready within two minutes. Run docker compose logs for details.");
-}
-
-export async function installProject(config: WikiConfig, directory: string): Promise<InstallResult> {
-  if (!config.installNow) return { installed: false, reason: "Installation was skipped." };
+export async function installProject(_config: WikiConfig, directory: string): Promise<InstallResult> {
   if (!(await commandExists("docker", ["compose", "version"]))) {
     return { installed: false, reason: "Docker Compose was not found. Setup files are ready." };
   }
 
-  await runDocker(directory, ["up", "-d", "database", "mediawiki"]);
-  await waitForMediaWiki(directory);
+  await runDocker(directory, ["run", "--rm", "mediawiki-install"]);
   return { installed: true };
 }
 

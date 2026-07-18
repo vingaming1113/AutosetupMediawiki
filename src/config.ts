@@ -76,7 +76,6 @@ export interface WikiConfig {
   extensions: ExtensionName[];
   captcha: CaptchaConfig;
   outputDirectory: string;
-  installNow: boolean;
 }
 
 export function recommendedExtensions(): ExtensionName[] {
@@ -105,7 +104,6 @@ export function generatePassword(length = 24): string {
   const bytes = crypto.getRandomValues(new Uint8Array(length));
   return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
 }
-
 
 
 

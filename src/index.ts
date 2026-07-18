@@ -3,7 +3,6 @@
 import * as p from "@clack/prompts";
 import chalk from "chalk";
 import { generateProject } from "./generator";
-import { installProject } from "./installer";
 import { showSummary } from "./summary";
 import { promptForConfig } from "./ui";
 
@@ -36,10 +35,8 @@ if (args.has("--help") || args.has("-h")) {
     progress.start("Creating your MediaWiki project");
     try {
       const project = await generateProject(config);
-      progress.message(config.installNow ? "Starting MediaWiki with Docker" : "Finishing setup files");
-      const result = await installProject(config, project.directory);
-      progress.stop(result.installed ? "MediaWiki is running" : "Setup files are ready");
-      showSummary(config, project.directory, result);
+      progress.stop("Setup files are ready");
+      showSummary(config, project.directory);
     } catch (error) {
       progress.stop("Setup stopped");
       throw error;
@@ -52,4 +49,3 @@ if (args.has("--help") || args.has("-h")) {
     process.exitCode = 1;
   }
 }
-

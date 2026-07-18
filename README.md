@@ -18,7 +18,7 @@
 
 </div>
 
-A friendly Bun-powered terminal wizard that creates and optionally starts a complete MediaWiki installation with Docker.
+A friendly Bun-powered terminal wizard that creates a complete MediaWiki installation project for Docker.
 
 Name your wiki, choose its language and URL, add a custom logo, create an administrator, and enable useful bundled extensions without manually writing Docker Compose or PHP configuration. Menus use the arrow keys and Space, and the finished setup appears in one clear summary card.
 
@@ -34,8 +34,7 @@ The cards above are live project statistics from GitHub and Shields.io, so build
 - Persistent wiki, database, and upload storage
 - Generated database secrets and private `.env` handling
 - Optional logo configuration
-- Automatic installation when Docker Compose is available
-- Safe generated-files fallback when Docker is unavailable
+- Generated files remain usable even when Docker is unavailable during setup
 - Final card showing the URL, administrator, CAPTCHA, extensions, files, and commands
 
 ## Extensions
@@ -83,9 +82,9 @@ See [tiagozip/cap](https://github.com/tiagozip/cap) for Cap's source and documen
 ## Requirements
 
 - [Bun](https://bun.sh/) 1.1 or newer
-- [Docker](https://docs.docker.com/get-docker/) with Docker Compose for one-click installation
+- [Docker](https://docs.docker.com/get-docker/) with Docker Compose to run the generated wiki
 
-Docker is optional while generating the files. If it is unavailable, the wizard still creates the complete project and explains how to continue later.
+Docker is optional while generating the files. The wizard does not start Docker automatically.
 
 ## Quick start
 
@@ -98,7 +97,7 @@ bun start
 
 Use **Up/Down** to move through menus, **Space** to toggle extensions, and **Enter** to confirm.
 
-The default output directory is `./mediawiki-setup`. When automatic installation succeeds, open the URL displayed in the final card and sign in using the administrator account you created.
+The default output directory is `./mediawiki-setup`. After generation, enter that directory and run the first-time install command shown in the final card.
 
 ## Generated project
 
@@ -116,12 +115,12 @@ The default output directory is `./mediawiki-setup`. When automatic installation
 From inside the generated directory:
 
 ```sh
+docker compose run --rm mediawiki-install
 docker compose up -d
-docker compose logs -f
 docker compose down
 ```
 
-The first start waits for MariaDB, creates `LocalSettings.php`, installs MediaWiki, and then starts the web service. The installer is idempotent, so later starts keep the existing installation. To follow first-start progress, run `docker compose logs -f mediawiki-install mediawiki`.
+The explicit install command waits for MariaDB, creates `LocalSettings.php`, and installs MediaWiki. The installer is idempotent, so later starts can use `docker compose up -d` without running it again.
 
 Do not run `docker compose down -v` unless you intentionally want to delete the wiki and database volumes.
 
@@ -154,7 +153,7 @@ The CI workflow performs the frozen install, dependency audit, type-check, tests
 
 ## Troubleshooting
 
-If setup stops while Docker is starting, enter the generated directory and run:
+If the first-time install stops, enter the generated directory and run:
 
 ```sh
 docker compose ps
