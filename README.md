@@ -74,7 +74,7 @@ After selecting Cap, choose one of two paths:
 - **Set up Cap automatically** asks for a local port and the public URL browsers will use. The generated stack runs Cap Standalone and Valkey, creates a site key with instrumentation enabled, and allows the wiki's visitor-facing origin.
 - **Use an existing Cap server** asks for its public URL, site key, and matching secret key.
 
-Automatic setup deliberately pins Cap Standalone `3.1.5`, Valkey `9.0.4-alpine`, widget `0.1.56`, and WASM `0.0.7`. The generated wiki loads the widget from your Cap server, not a third-party CDN, and verifies every submitted token server-side through `/siteverify`.
+Automatic setup deliberately pins Cap Standalone `3.1.7`, Valkey `9.0.4-alpine`, widget `0.1.56`, and WASM `0.0.7`. The generated wiki loads the widget from your Cap server, not a third-party CDN, submits Cap's native `cap-token` field, and verifies every submitted token server-side through `/siteverify`.
 
 Cap must be publicly reachable by visitors. For a public wiki, route the chosen Cap URL through your reverse proxy and configure its DNS and TLS. Automatic setup stores the dashboard admin key only in `.env` and generated site credentials in a dedicated `cap-credentials` Docker volume. Existing-server secrets remain only in `.env`.
 

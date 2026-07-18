@@ -34,6 +34,8 @@ use MediaWiki\\MediaWikiServices;
 use MediaWiki\\Output\\OutputPage;
 
 class CapCaptcha extends SimpleCaptcha {
+    public const TOKEN_FIELD = 'cap-token';
+
     private ?string $capError = null;
 
     public static function getApiEndpoint(): string {
@@ -64,7 +66,7 @@ class CapCaptcha extends SimpleCaptcha {
         return Html::rawElement( 'cap-widget', [
             'required' => true,
             'data-cap-api-endpoint' => self::getApiEndpoint(),
-            'data-cap-hidden-field-name' => 'g-recaptcha-response',
+            'data-cap-hidden-field-name' => self::TOKEN_FIELD,
             'class' => [ 'mw-confirmedit-captcha-fail' => (bool)$this->capError ],
         ], '' );
     }
@@ -90,8 +92,11 @@ class CapCaptcha extends SimpleCaptcha {
 
     protected function getCaptchaParamsFromRequest( $request ) {
         $response = $request->getVal(
-            'g-recaptcha-response',
-            $request->getVal( 'captchaWord', $request->getVal( 'captchaword' ) )
+            self::TOKEN_FIELD,
+            $request->getVal(
+                'captchaWord',
+                $request->getVal( 'captchaword', $request->getVal( 'g-recaptcha-response' ) )
+            )
         );
         return [ 'not used', $response ];
     }
@@ -113,13 +118,15 @@ class CapCaptcha extends SimpleCaptcha {
             self::getVerificationEndpoint(),
             [
                 'method' => 'POST',
-                'postData' => [
+                'postData' => FormatJson::encode( [
                     'secret' => $wgCapCaptchaSecretKey,
                     'response' => $word,
-                ],
+                ] ),
+                'timeout' => 10,
             ],
             __METHOD__
         );
+        $request->setHeader( 'Content-Type', 'application/json' );
         $status = $request->execute();
         if ( !$status->isOK() ) {
             $this->capError = 'http';
@@ -156,7 +163,7 @@ class CapCaptcha extends SimpleCaptcha {
 
     public function apiGetAllowedParams( ApiBase $module, &$params, $flags ) {
         if ( $flags && $this->isAPICaptchaModule( $module ) ) {
-            $params['g-recaptcha-response'] = [
+            $params[self::TOKEN_FIELD] = [
                 ApiBase::PARAM_HELP_MSG => 'captcha-apihelp-param-captchaword',
             ];
         }
@@ -164,7 +171,7 @@ class CapCaptcha extends SimpleCaptcha {
     }
 
     public function getApiParams(): array {
-        return [ 'g-recaptcha-response' ];
+        return [ self::TOKEN_FIELD ];
     }
 
     public function storeCaptcha( $info ) {
@@ -227,6 +234,12 @@ class CapCaptchaAuthenticationRequest extends CaptchaAuthenticationRequest {
     }
 
     public function loadFromSubmission( array $data ) {
+        if ( isset( $data[CapCaptcha::TOKEN_FIELD] ) && !isset( $data['captchaWord'] ) ) {
+            $data['captchaWord'] = $data[CapCaptcha::TOKEN_FIELD];
+        }
+        if ( isset( $data['g-recaptcha-response'] ) && !isset( $data['captchaWord'] ) ) {
+            $data['captchaWord'] = $data['g-recaptcha-response'];
+        }
         return AuthenticationRequest::loadFromSubmission( $data );
     }
 
@@ -263,7 +276,7 @@ class HTMLCapCaptchaField extends HTMLFormField {
         $this->endpoint = $params['endpoint'];
         $this->scriptUrl = $params['scriptUrl'];
         $this->error = $params['error'];
-        $this->mName = 'g-recaptcha-response';
+        $this->mName = CapCaptcha::TOKEN_FIELD;
     }
 
     public function getInputHTML( $value ) {
@@ -281,7 +294,7 @@ class HTMLCapCaptchaField extends HTMLFormField {
         return Html::rawElement( 'cap-widget', [
             'required' => true,
             'data-cap-api-endpoint' => $this->endpoint,
-            'data-cap-hidden-field-name' => 'g-recaptcha-response',
+            'data-cap-hidden-field-name' => CapCaptcha::TOKEN_FIELD,
             'class' => [ 'mw-confirmedit-captcha-fail' => (bool)$this->error ],
         ], '' );
     }

@@ -42,7 +42,7 @@ function renderCompose(config: WikiConfig): string {
       retries: 10
 
   cap:
-    image: tiago2/cap:3.1.5
+    image: tiago2/cap:3.1.7
     restart: unless-stopped
     ports:
       - "\${CAP_STANDALONE_PORT}:3000"
@@ -58,7 +58,7 @@ function renderCompose(config: WikiConfig): string {
         condition: service_healthy
 
   cap-init:
-    image: tiago2/cap:3.1.5
+    image: tiago2/cap:3.1.7
     user: "0:0"
     restart: "no"
     depends_on:

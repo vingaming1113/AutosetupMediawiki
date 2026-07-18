@@ -147,9 +147,12 @@ describe("project generator", () => {
     expect(settings).not.toContain("ReCaptchaNoCaptcha");
     expect(adapter).toContain("siteverify");
     expect(adapter).toContain("getVerificationEndpoint");
+    expect(adapter).toContain("public const TOKEN_FIELD = 'cap-token'");
+    expect(adapter).toContain("$request->setHeader( 'Content-Type', 'application/json' );");
     expect(adapter).toContain("'type' => 'module'");
     expect(authentication).toContain("class CapCaptchaAuthenticationRequest");
-    expect(field).toContain("data-cap-hidden-field-name");
+    expect(authentication).toContain("CapCaptcha::TOKEN_FIELD");
+    expect(field).toContain("CapCaptcha::TOKEN_FIELD");
     expect(manifest["license-name"]).toBe("MIT");
     expect(generatedReadme).toContain("WIDGET_VERSION=0.1.56");
     await expect(stat(join(project.directory, "cap-init.ts"))).rejects.toThrow();
@@ -197,8 +200,8 @@ describe("project generator", () => {
       volumes: Record<string, unknown>;
     };
 
-    expect(parsedCompose.services.cap.image).toBe("tiago2/cap:3.1.5");
-    expect(parsedCompose.services["cap-init"].image).toBe("tiago2/cap:3.1.5");
+    expect(parsedCompose.services.cap.image).toBe("tiago2/cap:3.1.7");
+    expect(parsedCompose.services["cap-init"].image).toBe("tiago2/cap:3.1.7");
     expect(parsedCompose.services["cap-valkey"].image).toBe("valkey/valkey:9.0.4-alpine");
     expect(parsedCompose.services.cap.ports).toContain("${CAP_STANDALONE_PORT}:3000");
     expect(parsedCompose.services.cap.environment.ADMIN_KEY).toBe("${CAP_STANDALONE_ADMIN_KEY}");
